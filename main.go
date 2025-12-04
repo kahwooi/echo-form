@@ -6,9 +6,12 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 
+	"github.com/aliyun/aliyun-oss-go-sdk/oss"
 	"github.com/google/uuid"
+	"github.com/joho/godotenv"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 )
@@ -21,9 +24,13 @@ type CompannyRegisterForm struct {
 }
 
 func main() {
+	loadEnv()
+
 	e := echo.New()
 
 	e.Use(middleware.CORS())
+
+	e.GET("/presigned", handleGetPresignedURL)
 
 	e.GET("/config", handleConfig)
 
@@ -36,11 +43,65 @@ func main() {
 	e.Logger.Fatal(e.Start(":8080"))
 }
 
+func loadEnv() {
+	err := godotenv.Load()
+	if err != nil {
+		log.Printf("No .env file found, using system environment variables")
+	}
+}
+
 func handleConfig(c echo.Context) error {
 	return c.JSON(200, map[string]string{
 		"maxGeneralFiles":   "2",
 		"maxPlateNumbers":   "5",
 		"concurrentUploads": "2",
+	})
+}
+
+func handleGetPresignedURL(c echo.Context) error {
+	endpoint := os.Getenv("OSS_ENDPOINT")
+	accessKeyID := os.Getenv("OSS_ACCESS_KEY_ID")
+	accessKeySecret := os.Getenv("OSS_ACCESS_KEY_SECRET")
+	bucketName := os.Getenv("OSS_BUCKET_NAME")
+
+	registerId := c.QueryParam("registerId")
+	fileType := c.QueryParam("fileType")
+	fileName := c.QueryParam("fileName")
+	plateNumber := c.QueryParam("plateNumber")
+
+	contentType := c.QueryParam("contentType")
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+
+	client, err := oss.New(endpoint, accessKeyID, accessKeySecret)
+	if err != nil {
+		return c.String(500, fmt.Sprintf("Failed to create OSS client %s", err.Error()))
+	}
+
+	var objectKey string
+
+	if fileType == "plate" {
+		// Example: uploads/{id}/plates/{plate}_{filename}
+		objectKey = path.Join("uploads", registerId, "plates", fmt.Sprintf("%s_%s", plateNumber, fileName))
+	} else {
+		// Example: uploads/{id}/general/{filename}
+		objectKey = path.Join("uploads", registerId, "general", fileName)
+	}
+
+	bucket, err := client.Bucket(bucketName)
+	if err != nil {
+		return c.String(500, fmt.Sprintf("Failed to get OSS bucket %s", err.Error()))
+	}
+
+	signedURL, err := bucket.SignURL(objectKey, oss.HTTPPut, 900, oss.ContentType(contentType))
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	return c.JSON(200, map[string]string{
+		"url": signedURL,
+		"key": objectKey,
 	})
 }
 

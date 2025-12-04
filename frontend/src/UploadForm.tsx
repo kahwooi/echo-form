@@ -98,16 +98,30 @@ export function UploadForm() {
 
     // --- API Calls ---
 
+    const putFileToOSS = async (signedUrl: string, file: RcFile, onProgress?: (event: AxiosProgressEvent) => void) => {
+        await axios.put(signedUrl, file, {
+            headers: {
+                'Content-Type': file.type || 'application/octet-stream',
+            },
+            onUploadProgress: onProgress,
+        });
+    }
+
     // 1. Upload General File
     const uploadGeneralFile = async (file: RcFile, companyId: string): Promise<void> => {
         const formData = new FormData();
         formData.append('file', file);
 
         try {
-            await axios.post(`${API_BASE}/registers/company/${companyId}/general`, formData, {
-                headers: { 'Content-Type': 'multipart/form-data' },
-                onUploadProgress: (event) => updateProgress(event, file.uid)
+            const { data } = await axios.get(`${API_BASE}/presigned`, {
+                params: {
+                    registerId: companyId,
+                    fileType: 'general',
+                    fileName: file.name,
+                    contentType: file.type || 'application/octet-stream'
+                }
             });
+            await putFileToOSS(data.url, file, (event) => updateProgress(event, file.uid));
             updateFileStatus(setGeneralFileList, file.uid, 'done');
         } catch (err) {
             console.error(err);
@@ -118,17 +132,21 @@ export function UploadForm() {
 
     // 2. Upload Plate Specific File
     const uploadPlateFile = async (file: RcFile, companyId: string, plateNumber: string, rowIndex: number): Promise<void> => {
-        const formData = new FormData();
-        formData.append('file', file);
-
-        // Sanitize plate number for URL (remove spaces, etc if needed)
+         // Sanitize plate number for URL (remove spaces, etc if needed)
         const safePlate = encodeURIComponent(plateNumber);
 
         try {
-            await axios.post(`${API_BASE}/registers/company/${companyId}/plates/${safePlate}`, formData, {
-                headers: { 'Content-Type': 'multipart/form-data' },
-                onUploadProgress: (event) => updateProgress(event, file.uid)
+            const { data } = await axios.get(`${API_BASE}/presigned`, {
+                params: {
+                    registerId: companyId,
+                    fileType: 'plate',
+                    fileName: file.name,
+                    plateNumber: safePlate,
+                    contentType: file.type || 'application/octet-stream'
+                }
             });
+
+            await putFileToOSS(data.url, file, (event) => updateProgress(event, file.uid));
             
             // Helper to update state inside the Map
             setPlateFilesMap(prev => {
