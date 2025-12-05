@@ -5,6 +5,7 @@ import {
     UploadOutlined, 
     PlusOutlined 
 } from "@ant-design/icons";
+import { Turnstile } from "@marsidev/react-turnstile";
 import { 
     Card, 
     Typography, 
@@ -26,6 +27,7 @@ import type { RcFile } from "antd/es/upload";
 import Dragger from "antd/es/upload/Dragger";
 import axios, { type AxiosProgressEvent } from "axios";
 import { useEffect, useState } from "react";
+import { TurnstileWidget } from "./TurnstileWidget";
 
 const { Title, Text } = Typography;
 
@@ -47,6 +49,8 @@ type PlateFileMap = Record<number, UploadFile[]>;
 // --- Config ---
 const API_BASE = "http://localhost:8080";
 
+const siteKey = process.env.BUN_PUBLIC_TURNSTILE_SITE_KEY;
+
 export function UploadForm() {
     const [form] = Form.useForm();
     const [config, setConfig] = useState({
@@ -63,6 +67,8 @@ export function UploadForm() {
     
     const [uploading, setUploading] = useState(false);
     const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({});
+
+    const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
 
     // --- Config ---
     useEffect(() => {
@@ -227,6 +233,10 @@ export function UploadForm() {
     }
 
     const onFinish = async (values: ProjectFormValues) => {
+        if (!turnstileToken) {
+            return message.error('Please complete the security verification.');
+        }
+
         // Basic Validation: Ensure at least one file exists somewhere
         const hasGeneral = generalFileList.length > 0;
         const hasPlateFiles = Object.values(plateFilesMap).some(list => list.length > 0);
@@ -424,6 +434,17 @@ export function UploadForm() {
                             </div>
                         )
                     ))}
+
+                    <Form.Item>
+                        <TurnstileWidget
+                            siteKey={siteKey || ''}
+                            onVerify={setTurnstileToken}
+                            onError={() => {
+                                setTurnstileToken(null);
+                                message.error('Security verification failed. Please try again.');
+                            }}
+                        />
+                    </Form.Item>
 
                     <Form.Item style={{ marginTop: 24 }}>
                         <Button 
