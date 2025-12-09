@@ -16,6 +16,15 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 )
 
+type ResidentRegisterForm struct {
+	ResidentName     string `json:"residentName" validate:"required,min=3,max=50"`
+	ContactNumber    string `json:"contactNumber" validate:"required,min=2,max=10"`
+	AddressLine1     string `json:"addressLine1" validate:"required,min=5,max=100"`
+	AddressLine2     string `json:"addressLine2" validate:"max=100"`
+	PlateNumber      string `json:"plateNumber" validate:"required,min=2,max=10"`
+	VehicleClassType string `json:"vehicleClassType" validate:"required,oneof=1 2 3 4 5 6 7"`
+}
+
 type CompannyRegisterForm struct {
 	CompayRegistrationNumber string   `json:"companyRegistrationNumber"`
 	CompanyName              string   `json:"companyName"`
@@ -28,11 +37,15 @@ func main() {
 
 	e := echo.New()
 
+	e.Validator = NewValidator()
+
 	e.Use(middleware.CORS())
 
 	e.GET("/presigned", handleGetPresignedURL)
 
 	e.GET("/config", handleConfig)
+
+	e.POST("/registers/resident", handleCreateResidentRegister)
 
 	e.POST("/registers/company", handleCreateCompanyRegister)
 
@@ -103,6 +116,25 @@ func handleGetPresignedURL(c echo.Context) error {
 		"url": signedURL,
 		"key": objectKey,
 	})
+}
+
+func handleCreateResidentRegister(c echo.Context) error {
+	form := new(ResidentRegisterForm)
+
+	if err := c.Bind(form); err != nil {
+		return ErrorResponse(c, 400, "Invalid input format", err.Error())
+	}
+
+	if err := c.Validate(form); err != nil {
+		if he, ok := err.(*echo.HTTPError); ok {
+			return ErrorResponse(c, http.StatusBadRequest, "", he.Message)
+		}
+		return ErrorResponse(c, http.StatusBadRequest, "Validation failed", err.Error())
+	}
+
+	registerId := uuid.New().String()
+
+	return SuccessResponse(c, "Registration successful", map[string]string{"id": registerId})
 }
 
 func handleCreateCompanyRegister(c echo.Context) error {

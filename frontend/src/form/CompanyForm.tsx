@@ -27,7 +27,7 @@ import type { RcFile } from "antd/es/upload";
 import Dragger from "antd/es/upload/Dragger";
 import axios, { type AxiosProgressEvent } from "axios";
 import { useEffect, useState } from "react";
-import { TurnstileWidget } from "./TurnstileWidget";
+import { TurnstileWidget } from "../TurnstileWidget";
 
 const { Title, Text } = Typography;
 
@@ -51,7 +51,7 @@ const API_BASE = "http://localhost:8080";
 
 const siteKey = process.env.BUN_PUBLIC_TURNSTILE_SITE_KEY;
 
-export function UploadForm() {
+export function CompanyForm() {
     const [form] = Form.useForm();
     const [config, setConfig] = useState({
         maxGeneralFiles: 2,
@@ -281,7 +281,7 @@ export function UploadForm() {
     return (
         <Layout style={{ padding: '2rem', minHeight: '100vh', background: '#f0f2f5' }}>
             <Card style={{ width: '100%' }}>
-                <Title level={2} style={{ textAlign: 'center', marginBottom: 30 }}>Company Registration</Title>
+                <Title level={2} style={{ textAlign: 'center', marginBottom: 30 }}>Company Form</Title>
                 
                 <Form 
                     form={form} 
@@ -361,7 +361,7 @@ export function UploadForm() {
                                                 rules={[{ required: true, message: 'Required' }]}
                                                 style={{ flex: 1, marginBottom: 0 }}
                                             >
-                                                <Input placeholder="Enter Plate Number (e.g. WWA 1234)" />
+                                                <Input placeholder="Enter Plate Number (e.g. WWA 1234)" size="large" />
                                             </Form.Item>
 
                                             {/* Small Upload Button per row */}
@@ -454,7 +454,7 @@ export function UploadForm() {
                             block 
                             loading={uploading}
                         >
-                            {uploading ? 'Uploading...' : 'Submit Project'}
+                            {uploading ? 'Submitting...' : 'Submit'}
                         </Button>
                     </Form.Item>
                 </Form>
