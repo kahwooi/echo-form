@@ -17,12 +17,25 @@ import (
 )
 
 type ResidentRegisterForm struct {
-	ResidentName  string `json:"residentName" validate:"required,min=3,max=50"`
-	ContactNumber string `json:"contactNumber" validate:"required,min=2,max=10"`
-	AddressLine1  string `json:"addressLine1" validate:"required,min=5,max=100"`
-	AddressLine2  string `json:"addressLine2" validate:"max=100"`
-	PlateNumber   string `json:"plateNumber" validate:"required,min=2,max=10"`
-	VehicleType   string `json:"vehicleType" validate:"required,oneof=1 2 3 4 5 6 7"`
+	ResidentName            string                    `json:"residentName" validate:"required,min=3,max=50"`
+	ContactNumber           string                    `json:"contactNumber" validate:"required,min=2,max=10"`
+	ContactEmail            string                    `json:"contactEmail" validate:"required,email"`
+	ResidentAddressLine1    string                    `json:"residentAddressLine1" validate:"required,min=5,max=100"`
+	ResidentAddressLine2    string                    `json:"residentAddressLine2,omitempty" validate:"max=100"` // optional
+	PlateNumber             string                    `json:"plateNumber" validate:"required"`
+	VehicleType             string                    `json:"vehicleType" validate:"required"`
+	ResidentPlates          ResidentPlates            `json:"residentPlate"`
+	ResidentSupportingFiles []ResidentSupportingFiles `json:"residentSupportingFiles"`
+}
+
+type ResidentPlates struct {
+	PlateNumber string `json:"plateNumber"`
+	VehicleType string `json:"vehicleType"`
+	FileKey     string `json:"fileKey"`
+}
+
+type ResidentSupportingFiles struct {
+	FileKey string `json:"fileKey"`
 }
 
 type CompanyRegisterForm struct {
@@ -64,6 +77,8 @@ func main() {
 	e.GET("/presigned/download", handleGetPresignedDownloadURL)
 
 	e.POST("/registers/resident", handleCreateResidentRegister)
+
+	e.POST("/registers/resident/finalize", handleCreateResidentRegisterFinalize)
 
 	e.POST("/registers/company", handleCreateCompanyRegister)
 
@@ -183,7 +198,31 @@ func handleCreateResidentRegister(c echo.Context) error {
 
 	registerId := uuid.New().String()
 
-	return SuccessResponse(c, "Registration successful", map[string]string{"id": registerId})
+	return c.JSON(200, map[string]string{"id": registerId})
+}
+
+func handleCreateResidentRegisterFinalize(c echo.Context) error {
+	form := new(ResidentRegisterForm)
+
+	if err := c.Bind(form); err != nil {
+		return ErrorResponse(c, 400, "Invalid input format", err.Error())
+	}
+
+	if err := c.Validate(form); err != nil {
+		if he, ok := err.(*echo.HTTPError); ok {
+			return ErrorResponse(c, http.StatusBadRequest, "", he.Message)
+		}
+	}
+
+	log.Printf("Bound form: %+v", form)
+
+	log.Printf("plate number: %s = %s = %s \n", form.PlateNumber, form.VehicleType, form.ResidentPlates.FileKey)
+
+	for ind2, generals := range form.ResidentSupportingFiles {
+		log.Printf("%d - with general file key: %s \n", ind2, generals.FileKey)
+	}
+
+	return SuccessResponse(c, "Registration successful", map[string]string{"id": form.ResidentName})
 }
 
 func handleCreateCompanyRegister(c echo.Context) error {
@@ -219,7 +258,7 @@ func handleCreateCompanyRegisterFinalize(c echo.Context) error {
 	form := new(CompanyRegisterForm)
 
 	if err := c.Bind(form); err != nil {
-		return c.String(400, "Invalid input")
+		return ErrorResponse(c, 400, "Invalid input format", err.Error())
 	}
 
 	if err := c.Validate(form); err != nil {
