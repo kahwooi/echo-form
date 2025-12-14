@@ -17,19 +17,35 @@ import (
 )
 
 type ResidentRegisterForm struct {
-	ResidentName     string `json:"residentName" validate:"required,min=3,max=50"`
-	ContactNumber    string `json:"contactNumber" validate:"required,min=2,max=10"`
-	AddressLine1     string `json:"addressLine1" validate:"required,min=5,max=100"`
-	AddressLine2     string `json:"addressLine2" validate:"max=100"`
-	PlateNumber      string `json:"plateNumber" validate:"required,min=2,max=10"`
-	VehicleClassType string `json:"vehicleClassType" validate:"required,oneof=1 2 3 4 5 6 7"`
+	ResidentName  string `json:"residentName" validate:"required,min=3,max=50"`
+	ContactNumber string `json:"contactNumber" validate:"required,min=2,max=10"`
+	AddressLine1  string `json:"addressLine1" validate:"required,min=5,max=100"`
+	AddressLine2  string `json:"addressLine2" validate:"max=100"`
+	PlateNumber   string `json:"plateNumber" validate:"required,min=2,max=10"`
+	VehicleType   string `json:"vehicleType" validate:"required,oneof=1 2 3 4 5 6 7"`
 }
 
-type CompannyRegisterForm struct {
-	CompayRegistrationNumber string   `json:"companyRegistrationNumber"`
-	CompanyName              string   `json:"companyName"`
-	ContactPerson            string   `json:"contactPerson"`
-	PlateNumbers             []string `json:"plateNumbers"`
+type CompanyRegisterForm struct {
+	CompayRegistrationNumber string                   `json:"companyRegistrationNumber"`
+	TaxIdentificationNumber  string                   `json:"taxIdentificationNumber"`
+	CompanyName              string                   `json:"companyName"`
+	ContactPerson            string                   `json:"contactPerson"`
+	ContactNumber            string                   `json:"contactNumber"`
+	ContactEmail             string                   `json:"contactEmail" validate:"required,email"`
+	CompanyAddressLine1      string                   `json:"companyAddressLine1" validate:"required,min=5,max=100"`
+	CompanyAddressLine2      string                   `json:"companyAddressLine2" validate:"max=100"`
+	CompanyPlates            []CompanyPlates          `json:"companyPlates"`
+	CompanySupportingFiles   []CompanySupportingFiles `json:"companySupportingFiles"`
+}
+
+type CompanyPlates struct {
+	PlateNumber string `json:"plateNumber"`
+	VehicleType string `json:"vehicleType"`
+	FileKey     string `json:"fileKey"`
+}
+
+type CompanySupportingFiles struct {
+	FileKey string `json:"fileKey"`
 }
 
 func main() {
@@ -41,13 +57,17 @@ func main() {
 
 	e.Use(middleware.CORS())
 
+	e.GET("/config", handleConfig)
+
 	e.GET("/presigned", handleGetPresignedURL)
 
-	e.GET("/config", handleConfig)
+	e.GET("/presigned/download", handleGetPresignedDownloadURL)
 
 	e.POST("/registers/resident", handleCreateResidentRegister)
 
 	e.POST("/registers/company", handleCreateCompanyRegister)
+
+	e.POST("/registers/company/finalize", handleCreateCompanyRegisterFinalize)
 
 	e.POST("/registers/company/:id/plates/:plateNumber", handleUplaodCompanyPlateFile)
 
@@ -68,6 +88,35 @@ func handleConfig(c echo.Context) error {
 		"maxGeneralFiles":   "2",
 		"maxPlateNumbers":   "5",
 		"concurrentUploads": "2",
+	})
+}
+
+func handleGetPresignedDownloadURL(c echo.Context) error {
+	endpoint := os.Getenv("OSS_ENDPOINT")
+	accessKeyID := os.Getenv("OSS_ACCESS_KEY_ID")
+	accessKeySecret := os.Getenv("OSS_ACCESS_KEY_SECRET")
+	bucketName := os.Getenv("OSS_BUCKET_NAME")
+
+	objectKey := c.QueryParam("key")
+
+	client, err := oss.New(endpoint, accessKeyID, accessKeySecret)
+	if err != nil {
+		return c.String(500, fmt.Sprintf("Failed to create OSS client %s", err.Error()))
+	}
+
+	bucket, err := client.Bucket(bucketName)
+	if err != nil {
+		return c.String(500, fmt.Sprintf("Failed to get OSS bucket %s", err.Error()))
+	}
+
+	signedUrl, err := bucket.SignURL(objectKey, oss.HTTPGet, 900)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	return c.JSON(200, map[string]string{
+		"downloadUrl": signedUrl,
+		"key":         objectKey,
 	})
 }
 
@@ -92,6 +141,11 @@ func handleGetPresignedURL(c echo.Context) error {
 		return c.String(500, fmt.Sprintf("Failed to create OSS client %s", err.Error()))
 	}
 
+	bucket, err := client.Bucket(bucketName)
+	if err != nil {
+		return c.String(500, fmt.Sprintf("Failed to get OSS bucket %s", err.Error()))
+	}
+
 	var objectKey string
 
 	if fileType == "plate" {
@@ -100,11 +154,6 @@ func handleGetPresignedURL(c echo.Context) error {
 	} else {
 		// Example: uploads/{id}/general/{filename}
 		objectKey = path.Join("uploads", registerId, "general", fileName)
-	}
-
-	bucket, err := client.Bucket(bucketName)
-	if err != nil {
-		return c.String(500, fmt.Sprintf("Failed to get OSS bucket %s", err.Error()))
 	}
 
 	signedURL, err := bucket.SignURL(objectKey, oss.HTTPPut, 900, oss.ContentType(contentType))
@@ -138,10 +187,16 @@ func handleCreateResidentRegister(c echo.Context) error {
 }
 
 func handleCreateCompanyRegister(c echo.Context) error {
-	form := new(CompannyRegisterForm)
+	form := new(CompanyRegisterForm)
 
 	if err := c.Bind(form); err != nil {
 		return c.String(400, "Invalid input")
+	}
+
+	if err := c.Validate(form); err != nil {
+		if he, ok := err.(*echo.HTTPError); ok {
+			return ErrorResponse(c, http.StatusBadRequest, "", he.Message)
+		}
 	}
 
 	registerId := uuid.New().String()
@@ -153,11 +208,37 @@ func handleCreateCompanyRegister(c echo.Context) error {
 
 	log.Printf("Created company name %s path %s", form.CompanyName, registerId)
 
-	for _, plate := range form.PlateNumbers {
+	for _, plate := range form.CompanyPlates {
 		log.Printf(" - with plate number: %s", plate)
 	}
 
 	return c.JSON(200, map[string]string{"id": registerId})
+}
+
+func handleCreateCompanyRegisterFinalize(c echo.Context) error {
+	form := new(CompanyRegisterForm)
+
+	if err := c.Bind(form); err != nil {
+		return c.String(400, "Invalid input")
+	}
+
+	if err := c.Validate(form); err != nil {
+		if he, ok := err.(*echo.HTTPError); ok {
+			return ErrorResponse(c, http.StatusBadRequest, "", he.Message)
+		}
+	}
+
+	log.Printf("Bound form: %+v", form)
+
+	for ind1, plates := range form.CompanyPlates {
+		log.Printf("%d - with plate number: %s = %s = %s \n", ind1, plates.PlateNumber, plates.VehicleType, plates.FileKey)
+	}
+
+	for ind2, generals := range form.CompanySupportingFiles {
+		log.Printf("%d - with general file key: %s \n", ind2, generals.FileKey)
+	}
+
+	return SuccessResponse(c, "Registration successful", map[string]string{"id": form.CompayRegistrationNumber})
 }
 
 func handleUplaodCompanyPlateFile(c echo.Context) error {
