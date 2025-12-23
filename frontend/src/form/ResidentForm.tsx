@@ -276,7 +276,8 @@ export function ResidentForm() {
                                 fileType: 'general',
                                 documentType: fileType, // Specify SPA or Bill
                                 fileName: file.name,
-                                contentType: file.type || 'application/octet-stream'
+                                contentType: file.type || 'application/octet-stream',
+                                turnstileToken: turnstileToken
                             }
                         });
 
@@ -346,7 +347,8 @@ export function ResidentForm() {
                                 fileType: 'plate',
                                 plateNumber: encodeURIComponent(values.plateNumber),
                                 fileName: file.name,
-                                contentType: file.type || 'application/octet-stream'
+                                contentType: file.type || 'application/octet-stream',
+                                turnstileToken: turnstileToken
                             }
                         });
 

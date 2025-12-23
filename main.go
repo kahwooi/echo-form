@@ -1,10 +1,12 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -14,6 +16,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/nats-io/nats.go"
 )
 
 type ResidentRegisterForm struct {
@@ -63,6 +66,8 @@ type CompanySupportingFiles struct {
 
 func main() {
 	loadEnv()
+	initNATS()
+	defer natsConn.Close()
 
 	e := echo.New()
 
@@ -96,6 +101,18 @@ func loadEnv() {
 	if err != nil {
 		log.Printf("No .env file found, using system environment variables")
 	}
+}
+
+var natsConn *nats.Conn
+
+func initNATS() {
+	natsURL := os.Getenv("NATS_URL")
+	var err error
+	natsConn, err = nats.Connect(natsURL)
+	if err != nil {
+		log.Fatalf("Failed to connect to NATS: %v", err)
+	}
+	log.Printf("Connected to NATS at %s", natsURL)
 }
 
 func handleConfig(c echo.Context) error {
@@ -136,6 +153,13 @@ func handleGetPresignedDownloadURL(c echo.Context) error {
 }
 
 func handleGetPresignedURL(c echo.Context) error {
+	// remoteIP := c.Request().RemoteAddr
+
+	// token := c.QueryParam("turnstileToken")
+	// if !validateTurnstile(token, remoteIP) {
+	// 	return c.JSON(400, map[string]string{"error": "Invalid captcha"})
+	// }
+
 	endpoint := os.Getenv("OSS_ENDPOINT")
 	accessKeyID := os.Getenv("OSS_ACCESS_KEY_ID")
 	accessKeySecret := os.Getenv("OSS_ACCESS_KEY_SECRET")
@@ -267,17 +291,47 @@ func handleCreateCompanyRegisterFinalize(c echo.Context) error {
 		}
 	}
 
-	log.Printf("Bound form: %+v", form)
-
-	for ind1, plates := range form.CompanyPlates {
-		log.Printf("%d - with plate number: %s = %s = %s \n", ind1, plates.PlateNumber, plates.VehicleType, plates.FileKey)
+	natsPayload := map[string]interface{}{
+		"employerName":  form.CompanyName,
+		"contactPerson": form.ContactPerson,
+		"contactNumber": form.ContactNumber,
+		"address1":      form.CompanyAddressLine1,
+		"address2":      form.CompanyAddressLine2,
+		"companyRegNum": form.CompayRegistrationNumber,
+		"tinNumber":     form.TaxIdentificationNumber,
+		"email":         form.ContactEmail,
+		"individuals":   []map[string]interface{}{},
 	}
 
-	for ind2, generals := range form.CompanySupportingFiles {
-		log.Printf("%d - with general file key: %s \n", ind2, generals.FileKey)
+	for _, plate := range form.CompanyPlates {
+		individual := map[string]interface{}{
+			"fullName":      form.ContactPerson, // Using contact person as placeholder
+			"email":         form.ContactEmail,
+			"contactNumber": form.ContactNumber,
+			"address1":      form.CompanyAddressLine1,
+			"address2":      form.CompanyAddressLine2,
+			"nric":          "", // Not available in company form
+			"vehicleNum":    plate.PlateNumber,
+			"tinNumber":     form.TaxIdentificationNumber,
+			"vehicleClass":  plate.VehicleType,
+		}
+		natsPayload["individuals"] = append(natsPayload["individuals"].([]map[string]interface{}), individual)
 	}
 
-	return SuccessResponse(c, "Registration successful", map[string]string{"id": form.CompayRegistrationNumber})
+	data, err := json.Marshal(natsPayload)
+	if err != nil {
+		return ErrorResponse(c, 500, "Failed to marshal NATS payload", err.Error())
+	}
+
+	natsResponse, err := natsConn.Request("register.employer.0001", data, nats.DefaultTimeout)
+	if err != nil {
+		return ErrorResponse(c, 500, "Failed to send NATS message", err.Error())
+	}
+
+	return SuccessResponse(c, "Registration successful", map[string]interface{}{
+		"id":           form.CompayRegistrationNumber,
+		"natsResponse": natsResponse,
+	})
 }
 
 func handleUplaodCompanyPlateFile(c echo.Context) error {
@@ -360,4 +414,45 @@ func handleUploadCompanyGeneralFile(c echo.Context) error {
 		"status":   "success",
 		"filename": part.FileName(),
 	})
+}
+
+func validateTurnstile(token string, remoteIP string) bool {
+	secrectKey := os.Getenv("TURNSTILE_SECRET_KEY")
+	if secrectKey == "" {
+		log.Printf("TURNSTILE_SECRET_KEY not set, skipping turnstile validation")
+		return false
+	}
+
+	data := url.Values{}
+	data.Set("secret", secrectKey)
+	data.Set("response", token)
+	data.Set("remoteip", remoteIP)
+
+	resp, err := http.PostForm("https://challenges.cloudflare.com/turnstile/v0/siteverify", data)
+	if err != nil {
+		log.Printf("Failed to validate turnstile token %s", err.Error())
+		return false
+	}
+	defer resp.Body.Close()
+
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	log.Printf("Turnstile raw response: %s", string(bodyBytes))
+
+	var result struct {
+		Success     bool     `json:"success"`
+		ChallengeTS string   `json:"challenge_ts"`
+		Hostname    string   `json:"hostname"`
+		ErrorCodes  []string `json:"error-codes"`
+	}
+
+	if err := json.Unmarshal(bodyBytes, &result); err != nil {
+		log.Printf("Failed to decode Turnstile response: %v", err)
+		return false
+	}
+
+	if !result.Success {
+		log.Printf("Turnstile failed with errors: %v", result.ErrorCodes)
+	}
+
+	return result.Success
 }
