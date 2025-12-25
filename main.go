@@ -10,6 +10,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"time"
 
 	"github.com/aliyun/aliyun-oss-go-sdk/oss"
 	"github.com/google/uuid"
@@ -93,7 +94,7 @@ func main() {
 
 	e.POST("/registers/company/:id/general", handleUploadCompanyGeneralFile)
 
-	e.Logger.Fatal(e.Start(":8080"))
+	e.Logger.Fatal(e.Start(":8081"))
 }
 
 func loadEnv() {
@@ -238,15 +239,43 @@ func handleCreateResidentRegisterFinalize(c echo.Context) error {
 		}
 	}
 
-	log.Printf("Bound form: %+v", form)
-
-	log.Printf("plate number: %s = %s = %s \n", form.PlateNumber, form.VehicleType, form.ResidentPlates.FileKey)
-
-	for ind2, generals := range form.ResidentSupportingFiles {
-		log.Printf("%d - with general file key: %s \n", ind2, generals.FileKey)
+	natsPayload := map[string]interface{}{
+		"fullName":      form.ResidentName,
+		"email":         form.ContactEmail,
+		"contactNumber": form.ContactNumber,
+		"address1":      form.ResidentAddressLine1,
+		"address2":      form.ResidentAddressLine2,
+		"nric":          "",
+		"vehicleNum":    form.PlateNumber,
+		"tinNumber":     "",
+		"vehicleClass":  form.VehicleType,
 	}
 
-	return SuccessResponse(c, "Registration successful", map[string]string{"id": form.ResidentName})
+	data, err := json.Marshal(natsPayload)
+	if err != nil {
+		return ErrorResponse(c, 500, "Failed to marshal NATS payload", err.Error())
+	}
+
+	registerIndividualSubject := os.Getenv("REGISTER_INDIVIDUAL_SUBJECT")
+	if registerIndividualSubject == "" {
+		return ErrorResponse(c, 500, "Missing REGISTER_INDIVIDUAL_SUBJECT environment variable", nil)
+	}
+
+	siteCode := os.Getenv("SITE_CODE")
+	if siteCode == "" {
+		return ErrorResponse(c, 500, "Missing SITE_CODE environment variable", nil)
+	}
+
+	subject := fmt.Sprintf("%s.%s", registerIndividualSubject, siteCode)
+	natsResponse, err := natsConn.Request(subject, data, 10*time.Second)
+	if err != nil {
+		return ErrorResponse(c, 500, "Failed to send NATS message", err.Error())
+	}
+
+	return SuccessResponse(c, "Registration successful", map[string]interface{}{
+		"residentName": form.ResidentName,
+		"natsResponse": natsResponse,
+	})
 }
 
 func handleCreateCompanyRegister(c echo.Context) error {
@@ -323,7 +352,18 @@ func handleCreateCompanyRegisterFinalize(c echo.Context) error {
 		return ErrorResponse(c, 500, "Failed to marshal NATS payload", err.Error())
 	}
 
-	natsResponse, err := natsConn.Request("register.employer.0001", data, nats.DefaultTimeout)
+	registerEmployerSubject := os.Getenv("REGISTER_EMPLOYER_SUBJECT")
+	if registerEmployerSubject == "" {
+		return ErrorResponse(c, 500, "Missing REGISTER_EMPLOYER_SUBJECT environment variable", nil)
+	}
+
+	siteCode := os.Getenv("SITE_CODE")
+	if siteCode == "" {
+		return ErrorResponse(c, 500, "Missing SITE_CODE environment variable", nil)
+	}
+
+	subject := fmt.Sprintf("%s.%s", registerEmployerSubject, siteCode)
+	natsResponse, err := natsConn.Request(subject, data, 10*time.Second)
 	if err != nil {
 		return ErrorResponse(c, 500, "Failed to send NATS message", err.Error())
 	}

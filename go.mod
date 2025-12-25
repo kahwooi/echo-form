@@ -1,4 +1,4 @@
-module echo-form
+module maxpark_opp_registration
 
 go 1.25.3
 

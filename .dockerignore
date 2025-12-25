@@ -1,0 +1,9 @@
+.git
+.gitignore
+README.md
+Dockerfile
+docker-compose.yml
+tmp/
+.env.example
+migrate.exe
+frontend/
