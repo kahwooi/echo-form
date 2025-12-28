@@ -1,0 +1,78 @@
+@baseUrl = http://localhost:8081
+
+# Regsirer Individual/Resident
+POST {{baseUrl}}/registers/resident
+Content-Type: application/json
+
+{
+    "nricNumber": "881223145678",
+    "residentName": "Tan Kah Kow",
+    "contactNumber": "012345678",
+    "contactEmail": "tkk@maxpark.com",
+    "residentAddressLine1": "10 Anson Road",
+    "residentAddressLine2": "",
+    "plateNumber": "WSS9899",
+    "vehicleType": "1"
+}
+
+####
+# Register Company
+POST {{baseUrl}}/registers/company
+Content-Type: application/json
+
+{
+    "companyRegistrationNumber": "SM0000001A",
+    "tinNumber": "MA2819827D",
+    "companyName": "MaxPark Pte Ltd",
+    "contactPerson": "Tan Kah Kow",
+    "contactNumber": "012345678",  
+    "contactEmail": "tkk@maxpark.com",
+    "companyAddressLine1": "10 Anson Road",
+    "companyAddressLine2": "",
+    "companyPlates": [
+        {
+            "plateNumber": "WSS9899",
+            "vehicleType": "1"
+        }
+    ]
+}
+
+###
+# Presigned URL for individual/resident file upload
+GET {{baseUrl}}/presigned?registerId=95fc22cc-ecb0-44a6-8246-4dbfed453e88&fileType=plate&fileName=spa_file.jpg&plateNumber=WSS9899
+
+###
+# Presigned URL for company file upload
+GET {{baseUrl}}/presigned?registerId=95fc22cc-ecb0-44a6-8246-4dbfed453e88&fileType=general&fileName=spa_file.jpg&employerId=E000000227
+
+###
+# Register Company Finalize
+POST {{baseUrl}}/registers/company/finalize
+Content-Type: application/json
+
+{
+    "employerID": "E000000221",
+    "companyRegistrationNumber": "SM0000001A",
+    "tinNumber": "MA2819827D",
+    "companyName": "MaxPark Pte Ltd",
+    "contactPerson": "Tan Kah Kow",
+    "contactNumber": "012345678",  
+    "contactEmail": "tkk@maxpark.com",
+    "companyAddressLine1": "10 Anson Road",
+    "companyAddressLine2": "",
+    "companyPlates": [
+        {
+            "nricNumber": "881223145678",
+            "plateNumber": "WSS9899",
+            "vehicleType": "1",
+            "spaPath": "uploads/95fc22cc-ecb0-44a6-8246-4dbfed453e88/plates/WSS9899_spa_file.jpg",
+            "electricityBillPath": "uploads/95fc22cc-ecb0-44a6-8246-4dbfed453e88/plates/WSS9899_electricity_file.jpg",
+            "vehiclePath": "uploads/95fc22cc-ecb0-44a6-8246-4dbfed453e88/plates/WSS9899_vehicle_file.jpg"
+        }
+    ],
+    "companySupportingFiles": {
+        "ssmPath": "uploads/95fc22cc-ecb0-44a6-8246-4dbfed453e88/general/E000000221_smm_file.jpg",
+        "electricityBillPath": "uploads/95fc22cc-ecb0-44a6-8246-4dbfed453e88/general/E000000221_electricity_file.jpg",
+        "vehiclePath": "uploads/95fc22cc-ecb0-44a6-8246-4dbfed453e88/general/E000000221_vehicle_file.jpg"
+    }
+}

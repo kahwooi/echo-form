@@ -28,6 +28,8 @@ type ResidentRegisterForm struct {
 	ResidentAddressLine2    string                    `json:"residentAddressLine2,omitempty" validate:"max=100"` // optional
 	PlateNumber             string                    `json:"plateNumber" validate:"required"`
 	VehicleType             string                    `json:"vehicleType" validate:"required"`
+	NricNumber              string                    `json:"nric,omitempty"`      // optional
+	TinNumber               string                    `json:"tinNumber,omitempty"` // optional
 	ResidentPlates          ResidentPlates            `json:"residentPlate"`
 	ResidentSupportingFiles []ResidentSupportingFiles `json:"residentSupportingFiles"`
 }
@@ -43,26 +45,32 @@ type ResidentSupportingFiles struct {
 }
 
 type CompanyRegisterForm struct {
-	CompayRegistrationNumber string                   `json:"companyRegistrationNumber"`
-	TaxIdentificationNumber  string                   `json:"taxIdentificationNumber"`
-	CompanyName              string                   `json:"companyName"`
-	ContactPerson            string                   `json:"contactPerson"`
-	ContactNumber            string                   `json:"contactNumber"`
-	ContactEmail             string                   `json:"contactEmail" validate:"required,email"`
-	CompanyAddressLine1      string                   `json:"companyAddressLine1" validate:"required,min=5,max=100"`
-	CompanyAddressLine2      string                   `json:"companyAddressLine2" validate:"max=100"`
-	CompanyPlates            []CompanyPlates          `json:"companyPlates"`
-	CompanySupportingFiles   []CompanySupportingFiles `json:"companySupportingFiles"`
+	EmployerID               string                 `json:"employerID"`
+	CompayRegistrationNumber string                 `json:"companyRegistrationNumber"`
+	TinNumber                string                 `json:"tinNumber"`
+	CompanyName              string                 `json:"companyName"`
+	ContactPerson            string                 `json:"contactPerson"`
+	ContactNumber            string                 `json:"contactNumber"`
+	ContactEmail             string                 `json:"contactEmail" validate:"required,email"`
+	CompanyAddressLine1      string                 `json:"companyAddressLine1" validate:"required,min=5,max=100"`
+	CompanyAddressLine2      string                 `json:"companyAddressLine2" validate:"max=100"`
+	CompanyPlates            []CompanyPlates        `json:"companyPlates"`
+	CompanySupportingFiles   CompanySupportingFiles `json:"companySupportingFiles"`
 }
 
 type CompanyPlates struct {
-	PlateNumber string `json:"plateNumber"`
-	VehicleType string `json:"vehicleType"`
-	FileKey     string `json:"fileKey"`
+	NricNumber          string `json:"nricNumber"`
+	PlateNumber         string `json:"plateNumber"`
+	VehicleType         string `json:"vehicleType"`
+	SPAPath             string `json:"spaPath"`
+	ElectricityBillPath string `json:"electricityBillPath"`
+	VehiclePath         string `json:"vehiclePath"`
 }
 
 type CompanySupportingFiles struct {
-	FileKey string `json:"fileKey"`
+	SSMPath             string `json:"ssmPath"`
+	ElectricityBillPath string `json:"electricityBillPath"`
+	VehiclePath         string `json:"vehiclePath"`
 }
 
 func main() {
@@ -117,11 +125,12 @@ func initNATS() {
 }
 
 func handleConfig(c echo.Context) error {
-	return c.JSON(200, map[string]string{
+	configData := map[string]string{
 		"maxGeneralFiles":   "2",
 		"maxPlateNumbers":   "5",
 		"concurrentUploads": "2",
-	})
+	}
+	return SuccessResponse(c, "Configuration retrieved successfully", configData)
 }
 
 func handleGetPresignedDownloadURL(c echo.Context) error {
@@ -134,23 +143,24 @@ func handleGetPresignedDownloadURL(c echo.Context) error {
 
 	client, err := oss.New(endpoint, accessKeyID, accessKeySecret)
 	if err != nil {
-		return c.String(500, fmt.Sprintf("Failed to create OSS client %s", err.Error()))
+		return ErrorResponse(c, 500, "Failed to create OSS client", err.Error())
 	}
 
 	bucket, err := client.Bucket(bucketName)
 	if err != nil {
-		return c.String(500, fmt.Sprintf("Failed to get OSS bucket %s", err.Error()))
+		return ErrorResponse(c, 500, "Failed to get OSS bucket", err.Error())
 	}
 
 	signedUrl, err := bucket.SignURL(objectKey, oss.HTTPGet, 900)
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return ErrorResponse(c, http.StatusInternalServerError, "Failed to generate signed URL", err.Error())
 	}
 
-	return c.JSON(200, map[string]string{
+	responseData := map[string]string{
 		"downloadUrl": signedUrl,
 		"key":         objectKey,
-	})
+	}
+	return SuccessResponse(c, "Download URL generated successfully", responseData)
 }
 
 func handleGetPresignedURL(c echo.Context) error {
@@ -158,7 +168,7 @@ func handleGetPresignedURL(c echo.Context) error {
 
 	// token := c.QueryParam("turnstileToken")
 	// if !validateTurnstile(token, remoteIP) {
-	// 	return c.JSON(400, map[string]string{"error": "Invalid captcha"})
+	// 	return ErrorResponse(c, 400, "Invalid captcha", nil)
 	// }
 
 	endpoint := os.Getenv("OSS_ENDPOINT")
@@ -169,6 +179,7 @@ func handleGetPresignedURL(c echo.Context) error {
 	registerId := c.QueryParam("registerId")
 	fileType := c.QueryParam("fileType")
 	fileName := c.QueryParam("fileName")
+	employerId := c.QueryParam("employerId")
 	plateNumber := c.QueryParam("plateNumber")
 
 	contentType := c.QueryParam("contentType")
@@ -178,33 +189,35 @@ func handleGetPresignedURL(c echo.Context) error {
 
 	client, err := oss.New(endpoint, accessKeyID, accessKeySecret)
 	if err != nil {
-		return c.String(500, fmt.Sprintf("Failed to create OSS client %s", err.Error()))
+		return ErrorResponse(c, 500, "Failed to create OSS client", err.Error())
 	}
 
 	bucket, err := client.Bucket(bucketName)
 	if err != nil {
-		return c.String(500, fmt.Sprintf("Failed to get OSS bucket %s", err.Error()))
+		return ErrorResponse(c, 500, "Failed to get OSS bucket", err.Error())
 	}
 
 	var objectKey string
 
-	if fileType == "plate" {
-		// Example: uploads/{id}/plates/{plate}_{filename}
+	switch fileType {
+	case "plate":
 		objectKey = path.Join("uploads", registerId, "plates", fmt.Sprintf("%s_%s", plateNumber, fileName))
-	} else {
-		// Example: uploads/{id}/general/{filename}
-		objectKey = path.Join("uploads", registerId, "general", fileName)
+	case "general":
+		objectKey = path.Join("uploads", registerId, "general", fmt.Sprintf("%s_%s", employerId, fileName))
+	default:
+		return ErrorResponse(c, 400, "Invalid fileType", "fileType must be either 'plate' or 'general'")
 	}
 
 	signedURL, err := bucket.SignURL(objectKey, oss.HTTPPut, 900, oss.ContentType(contentType))
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return ErrorResponse(c, http.StatusInternalServerError, "Failed to generate signed URL", err.Error())
 	}
 
-	return c.JSON(200, map[string]string{
+	responseData := map[string]string{
 		"url": signedURL,
 		"key": objectKey,
-	})
+	}
+	return SuccessResponse(c, "Presigned URL generated successfully", responseData)
 }
 
 func handleCreateResidentRegister(c echo.Context) error {
@@ -216,14 +229,18 @@ func handleCreateResidentRegister(c echo.Context) error {
 
 	if err := c.Validate(form); err != nil {
 		if he, ok := err.(*echo.HTTPError); ok {
-			return ErrorResponse(c, http.StatusBadRequest, "", he.Message)
+			return ErrorResponse(c, http.StatusBadRequest, "Validation failed", he.Message)
 		}
 		return ErrorResponse(c, http.StatusBadRequest, "Validation failed", err.Error())
 	}
 
-	registerId := uuid.New().String()
+	registerID := uuid.New().String()
 
-	return c.JSON(200, map[string]string{"id": registerId})
+	responseData := map[string]string{
+		"registerID": registerID,
+	}
+
+	return SuccessResponse(c, "Resident registration form validated successfully", responseData)
 }
 
 func handleCreateResidentRegisterFinalize(c echo.Context) error {
@@ -235,8 +252,9 @@ func handleCreateResidentRegisterFinalize(c echo.Context) error {
 
 	if err := c.Validate(form); err != nil {
 		if he, ok := err.(*echo.HTTPError); ok {
-			return ErrorResponse(c, http.StatusBadRequest, "", he.Message)
+			return ErrorResponse(c, http.StatusBadRequest, "Validation failed", he.Message)
 		}
+		return ErrorResponse(c, http.StatusBadRequest, "Validation failed", err.Error())
 	}
 
 	natsPayload := map[string]interface{}{
@@ -245,10 +263,10 @@ func handleCreateResidentRegisterFinalize(c echo.Context) error {
 		"contactNumber": form.ContactNumber,
 		"address1":      form.ResidentAddressLine1,
 		"address2":      form.ResidentAddressLine2,
-		"nric":          "",
 		"vehicleNum":    form.PlateNumber,
-		"tinNumber":     "",
 		"vehicleClass":  form.VehicleType,
+		"nric":          form.NricNumber,
+		"tinNumber":     form.TinNumber,
 	}
 
 	data, err := json.Marshal(natsPayload)
@@ -272,39 +290,74 @@ func handleCreateResidentRegisterFinalize(c echo.Context) error {
 		return ErrorResponse(c, 500, "Failed to send NATS message", err.Error())
 	}
 
-	return SuccessResponse(c, "Registration successful", map[string]interface{}{
+	var natsResponseData interface{}
+	if err := json.Unmarshal(natsResponse.Data, &natsResponseData); err != nil {
+		// If we can't unmarshal, return as string
+		natsResponseData = string(natsResponse.Data)
+	}
+
+	responseData := map[string]interface{}{
 		"residentName": form.ResidentName,
-		"natsResponse": natsResponse,
-	})
+		"natsResponse": natsResponseData,
+	}
+	return SuccessResponse(c, "Resident registration finalized successfully", responseData)
 }
 
 func handleCreateCompanyRegister(c echo.Context) error {
 	form := new(CompanyRegisterForm)
 
 	if err := c.Bind(form); err != nil {
-		return c.String(400, "Invalid input")
+		return ErrorResponse(c, 400, "Invalid input format", err.Error())
 	}
 
 	if err := c.Validate(form); err != nil {
 		if he, ok := err.(*echo.HTTPError); ok {
-			return ErrorResponse(c, http.StatusBadRequest, "", he.Message)
+			return ErrorResponse(c, http.StatusBadRequest, "Validation failed", he.Message)
 		}
+		return ErrorResponse(c, http.StatusBadRequest, "Validation failed", err.Error())
 	}
 
-	registerId := uuid.New().String()
-
-	savePath := filepath.Join("uploads", registerId)
-	if err := os.MkdirAll(savePath, 0755); err != nil {
-		return c.String(500, "Failed to create register directory")
+	registerIndividualSubject := os.Getenv("REGISTER_EMPLOYER_ID_SUBJECT")
+	if registerIndividualSubject == "" {
+		return ErrorResponse(c, 500, "Missing REGISTER_EMPLOYER_ID_SUBJECT environment variable", nil)
 	}
 
-	log.Printf("Created company name %s path %s", form.CompanyName, registerId)
+	siteCode := os.Getenv("SITE_CODE")
+	if siteCode == "" {
+		return ErrorResponse(c, 500, "Missing SITE_CODE environment variable", nil)
+	}
+
+	subject := fmt.Sprintf("%s.%s", registerIndividualSubject, siteCode)
+
+	natsResponse, err := natsConn.Request(subject, nil, 10*time.Second)
+	if err != nil {
+		return ErrorResponse(c, 500, "Failed to send NATS message", err.Error())
+	}
+
+	var response map[string]interface{}
+	if err := json.Unmarshal(natsResponse.Data, &response); err != nil {
+		return ErrorResponse(c, 500, "Failed to parse NATS response", err.Error())
+	}
+
+	employerID, ok := response["data"].(string)
+	if !ok {
+		return ErrorResponse(c, 500, "Invalid response format", "Missing or invalid ID")
+	}
+
+	log.Printf("Created company name %s path %s", form.CompanyName, employerID)
 
 	for _, plate := range form.CompanyPlates {
-		log.Printf(" - with plate number: %s", plate)
+		log.Printf(" - with plate number: %s", plate.PlateNumber)
 	}
 
-	return c.JSON(200, map[string]string{"id": registerId})
+	registerID := uuid.New().String()
+
+	responseData := map[string]string{
+		"registerID": registerID,
+		"employerID": employerID,
+	}
+
+	return SuccessResponse(c, "Company registration initiated successfully", responseData)
 }
 
 func handleCreateCompanyRegisterFinalize(c echo.Context) error {
@@ -316,32 +369,35 @@ func handleCreateCompanyRegisterFinalize(c echo.Context) error {
 
 	if err := c.Validate(form); err != nil {
 		if he, ok := err.(*echo.HTTPError); ok {
-			return ErrorResponse(c, http.StatusBadRequest, "", he.Message)
+			return ErrorResponse(c, http.StatusBadRequest, "Validation failed", he.Message)
 		}
+		return ErrorResponse(c, http.StatusBadRequest, "Validation failed", err.Error())
 	}
 
 	natsPayload := map[string]interface{}{
-		"employerName":  form.CompanyName,
-		"contactPerson": form.ContactPerson,
-		"contactNumber": form.ContactNumber,
-		"address1":      form.CompanyAddressLine1,
-		"address2":      form.CompanyAddressLine2,
-		"companyRegNum": form.CompayRegistrationNumber,
-		"tinNumber":     form.TaxIdentificationNumber,
-		"email":         form.ContactEmail,
-		"individuals":   []map[string]interface{}{},
+		"employerID":             form.EmployerID,
+		"companyRegNum":          form.CompayRegistrationNumber,
+		"tinNumber":              form.TinNumber,
+		"employerName":           form.CompanyName,
+		"contactPerson":          form.ContactPerson,
+		"contactNumber":          form.ContactNumber,
+		"email":                  form.ContactEmail,
+		"address1":               form.CompanyAddressLine1,
+		"address2":               form.CompanyAddressLine2,
+		"individuals":            []map[string]interface{}{},
+		"companySupportingFiles": form.CompanySupportingFiles,
 	}
 
 	for _, plate := range form.CompanyPlates {
 		individual := map[string]interface{}{
-			"fullName":      form.ContactPerson, // Using contact person as placeholder
+			"fullName":      form.ContactPerson,
 			"email":         form.ContactEmail,
 			"contactNumber": form.ContactNumber,
 			"address1":      form.CompanyAddressLine1,
 			"address2":      form.CompanyAddressLine2,
-			"nric":          "", // Not available in company form
+			"nric":          plate.NricNumber,
 			"vehicleNum":    plate.PlateNumber,
-			"tinNumber":     form.TaxIdentificationNumber,
+			"tinNumber":     form.TinNumber,
 			"vehicleClass":  plate.VehicleType,
 		}
 		natsPayload["individuals"] = append(natsPayload["individuals"].([]map[string]interface{}), individual)
@@ -368,10 +424,16 @@ func handleCreateCompanyRegisterFinalize(c echo.Context) error {
 		return ErrorResponse(c, 500, "Failed to send NATS message", err.Error())
 	}
 
-	return SuccessResponse(c, "Registration successful", map[string]interface{}{
+	var natsResponseData interface{}
+	if err := json.Unmarshal(natsResponse.Data, &natsResponseData); err != nil {
+		natsResponseData = string(natsResponse.Data)
+	}
+
+	responseData := map[string]interface{}{
 		"id":           form.CompayRegistrationNumber,
-		"natsResponse": natsResponse,
-	})
+		"natsResponse": natsResponseData,
+	}
+	return SuccessResponse(c, "Company registration finalized successfully", responseData)
 }
 
 func handleUplaodCompanyPlateFile(c echo.Context) error {
@@ -380,15 +442,15 @@ func handleUplaodCompanyPlateFile(c echo.Context) error {
 
 	reader, err := c.Request().MultipartReader()
 	if err != nil {
-		return c.String(400, fmt.Sprintf("Invalid multipart form data %s", err.Error()))
+		return ErrorResponse(c, 400, "Invalid multipart form data", err.Error())
 	}
 
 	part, err := reader.NextPart()
 	if err == io.EOF {
-		return c.String(400, "No file parts found")
+		return ErrorResponse(c, 400, "No file parts found", nil)
 	}
 	if err != nil {
-		return c.String(500, "Failed to read multipart data")
+		return ErrorResponse(c, 500, "Failed to read multipart data", err.Error())
 	}
 
 	savePath := filepath.Join("uploads", registerId, "plates")
@@ -398,22 +460,25 @@ func handleUplaodCompanyPlateFile(c echo.Context) error {
 
 	dst, err := os.Create(dstPath)
 	if err != nil {
-		return c.String(500, "Failed to create file on server")
+		return ErrorResponse(c, 500, "Failed to create file on server", err.Error())
 	}
 	defer dst.Close()
 
 	written, err := io.Copy(dst, part)
 	if err != nil {
-		return c.String(500, "Failed to save file on server")
+		return ErrorResponse(c, 500, "Failed to save file on server", err.Error())
 	}
 
 	log.Printf("Saved file %s (%d bytes) to project %s", part.FileName(), written, registerId)
 
-	return c.JSON(http.StatusOK, map[string]string{
+	responseData := map[string]interface{}{
 		"status":    "success",
 		"filename":  part.FileName(),
-		"savedPath": savePath,
-	})
+		"bytes":     written,
+		"savedPath": dstPath,
+		"projectId": registerId,
+	}
+	return SuccessResponse(c, "Plate file uploaded successfully", responseData)
 }
 
 func handleUploadCompanyGeneralFile(c echo.Context) error {
@@ -421,15 +486,15 @@ func handleUploadCompanyGeneralFile(c echo.Context) error {
 
 	reader, err := c.Request().MultipartReader()
 	if err != nil {
-		return c.String(400, fmt.Sprintf("Invalid multipart form data %s", err.Error()))
+		return ErrorResponse(c, 400, "Invalid multipart form data", err.Error())
 	}
 
 	part, err := reader.NextPart()
 	if err == io.EOF {
-		return c.String(400, "No file parts found")
+		return ErrorResponse(c, 400, "No file parts found", nil)
 	}
 	if err != nil {
-		return c.String(500, "Failed to read multipart data")
+		return ErrorResponse(c, 500, "Failed to read multipart data", err.Error())
 	}
 
 	savePath := filepath.Join("uploads", registerId, "general")
@@ -439,21 +504,25 @@ func handleUploadCompanyGeneralFile(c echo.Context) error {
 
 	dst, err := os.Create(dstPath)
 	if err != nil {
-		return c.String(500, "Failed to create file on server")
+		return ErrorResponse(c, 500, "Failed to create file on server", err.Error())
 	}
 	defer dst.Close()
 
 	written, err := io.Copy(dst, part)
 	if err != nil {
-		return c.String(500, "Failed to save file on server")
+		return ErrorResponse(c, 500, "Failed to save file on server", err.Error())
 	}
 
 	log.Printf("Saved file %s (%d bytes) to project %s", part.FileName(), written, registerId)
 
-	return c.JSON(http.StatusOK, map[string]string{
-		"status":   "success",
-		"filename": part.FileName(),
-	})
+	responseData := map[string]interface{}{
+		"status":    "success",
+		"filename":  part.FileName(),
+		"bytes":     written,
+		"savedPath": dstPath,
+		"projectId": registerId,
+	}
+	return SuccessResponse(c, "General file uploaded successfully", responseData)
 }
 
 func validateTurnstile(token string, remoteIP string) bool {
