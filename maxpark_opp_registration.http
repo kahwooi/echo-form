@@ -66,13 +66,13 @@ Content-Type: application/json
             "plateNumber": "WSS9899",
             "vehicleType": "1",
             "spaPath": "uploads/95fc22cc-ecb0-44a6-8246-4dbfed453e88/plates/WSS9899_spa_file.jpg",
-            "electricityBillPath": "uploads/95fc22cc-ecb0-44a6-8246-4dbfed453e88/plates/WSS9899_electricity_file.jpg",
+            "electricBillPath": "uploads/95fc22cc-ecb0-44a6-8246-4dbfed453e88/plates/WSS9899_electricity_file.jpg",
             "vehiclePath": "uploads/95fc22cc-ecb0-44a6-8246-4dbfed453e88/plates/WSS9899_vehicle_file.jpg"
         }
     ],
     "companySupportingFiles": {
         "ssmPath": "uploads/95fc22cc-ecb0-44a6-8246-4dbfed453e88/general/E000000221_smm_file.jpg",
-        "electricityBillPath": "uploads/95fc22cc-ecb0-44a6-8246-4dbfed453e88/general/E000000221_electricity_file.jpg",
+        "electricBillPath": "uploads/95fc22cc-ecb0-44a6-8246-4dbfed453e88/general/E000000221_electricity_file.jpg",
         "vehiclePath": "uploads/95fc22cc-ecb0-44a6-8246-4dbfed453e88/general/E000000221_vehicle_file.jpg"
     }
 }

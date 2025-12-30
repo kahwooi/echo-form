@@ -59,18 +59,18 @@ type CompanyRegisterForm struct {
 }
 
 type CompanyPlates struct {
-	NricNumber          string `json:"nricNumber"`
-	PlateNumber         string `json:"plateNumber"`
-	VehicleType         string `json:"vehicleType"`
-	SPAPath             string `json:"spaPath"`
-	ElectricityBillPath string `json:"electricityBillPath"`
-	VehiclePath         string `json:"vehiclePath"`
+	NricNumber       string `json:"nricNumber"`
+	PlateNumber      string `json:"plateNumber"`
+	VehicleType      string `json:"vehicleType"`
+	SPAPath          string `json:"spaPath"`
+	ElectricBillPath string `json:"electricBillPath"`
+	VehiclePath      string `json:"vehiclePath"`
 }
 
 type CompanySupportingFiles struct {
-	SSMPath             string `json:"ssmPath"`
-	ElectricityBillPath string `json:"electricityBillPath"`
-	VehiclePath         string `json:"vehiclePath"`
+	SSMPath          string `json:"ssmPath"`
+	ElectricBillPath string `json:"electricBillPath"`
+	VehiclePath      string `json:"vehiclePath"`
 }
 
 func main() {
@@ -390,15 +390,18 @@ func handleCreateCompanyRegisterFinalize(c echo.Context) error {
 
 	for _, plate := range form.CompanyPlates {
 		individual := map[string]interface{}{
-			"fullName":      form.ContactPerson,
-			"email":         form.ContactEmail,
-			"contactNumber": form.ContactNumber,
-			"address1":      form.CompanyAddressLine1,
-			"address2":      form.CompanyAddressLine2,
-			"nric":          plate.NricNumber,
-			"vehicleNum":    plate.PlateNumber,
-			"tinNumber":     form.TinNumber,
-			"vehicleClass":  plate.VehicleType,
+			"fullName":         form.ContactPerson,
+			"email":            form.ContactEmail,
+			"contactNumber":    form.ContactNumber,
+			"address1":         form.CompanyAddressLine1,
+			"address2":         form.CompanyAddressLine2,
+			"nric":             plate.NricNumber,
+			"vehicleNum":       plate.PlateNumber,
+			"tinNumber":        form.TinNumber,
+			"vehicleClass":     plate.VehicleType,
+			"spaPath":          plate.SPAPath,
+			"electricBillPath": plate.ElectricBillPath,
+			"vehiclePath":      plate.VehiclePath,
 		}
 		natsPayload["individuals"] = append(natsPayload["individuals"].([]map[string]interface{}), individual)
 	}
