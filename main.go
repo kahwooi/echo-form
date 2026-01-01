@@ -21,27 +21,26 @@ import (
 )
 
 type ResidentRegisterForm struct {
-	ResidentName            string                    `json:"residentName" validate:"required,min=3,max=50"`
-	ContactNumber           string                    `json:"contactNumber" validate:"required,min=2,max=10"`
-	ContactEmail            string                    `json:"contactEmail" validate:"required,email"`
-	ResidentAddressLine1    string                    `json:"residentAddressLine1" validate:"required,min=5,max=100"`
-	ResidentAddressLine2    string                    `json:"residentAddressLine2,omitempty" validate:"max=100"` // optional
-	PlateNumber             string                    `json:"plateNumber" validate:"required"`
-	VehicleType             string                    `json:"vehicleType" validate:"required"`
-	NricNumber              string                    `json:"nric,omitempty"`      // optional
-	TinNumber               string                    `json:"tinNumber,omitempty"` // optional
-	ResidentPlates          ResidentPlates            `json:"residentPlate"`
-	ResidentSupportingFiles []ResidentSupportingFiles `json:"residentSupportingFiles"`
+	ResidentName            string                  `json:"residentName" validate:"required,min=3,max=50"`
+	ContactNumber           string                  `json:"contactNumber" validate:"required,min=2,max=10"`
+	ContactEmail            string                  `json:"contactEmail" validate:"required,email"`
+	ResidentAddressLine1    string                  `json:"residentAddressLine1" validate:"required,min=5,max=100"`
+	ResidentAddressLine2    string                  `json:"residentAddressLine2,omitempty" validate:"max=100"` // optional
+	NricNumber              string                  `json:"nric,omitempty"`                                    // optional
+	TinNumber               string                  `json:"tinNumber,omitempty"`                               // optional
+	ResidentPlates          ResidentPlates          `json:"residentPlate"`
+	ResidentSupportingFiles ResidentSupportingFiles `json:"residentSupportingFiles"`
 }
 
 type ResidentPlates struct {
 	PlateNumber string `json:"plateNumber"`
 	VehicleType string `json:"vehicleType"`
-	FileKey     string `json:"fileKey"`
+	VehiclePath string `json:"vehiclePath"`
 }
 
 type ResidentSupportingFiles struct {
-	FileKey string `json:"fileKey"`
+	SPAPath          string `json:"spaPath"`
+	ElectricBillPath string `json:"electricBillPath"`
 }
 
 type CompanyRegisterForm struct {
@@ -258,15 +257,15 @@ func handleCreateResidentRegisterFinalize(c echo.Context) error {
 	}
 
 	natsPayload := map[string]interface{}{
+		"nric":          form.NricNumber,
+		"tinNumber":     form.TinNumber,
 		"fullName":      form.ResidentName,
 		"email":         form.ContactEmail,
 		"contactNumber": form.ContactNumber,
 		"address1":      form.ResidentAddressLine1,
 		"address2":      form.ResidentAddressLine2,
-		"vehicleNum":    form.PlateNumber,
-		"vehicleClass":  form.VehicleType,
-		"nric":          form.NricNumber,
-		"tinNumber":     form.TinNumber,
+		"vehicleNum":    form.ResidentPlates.PlateNumber,
+		"vehicleClass":  form.ResidentPlates.VehicleType,
 	}
 
 	data, err := json.Marshal(natsPayload)

@@ -1,11 +1,12 @@
 @baseUrl = http://localhost:8081
 
-# Regsirer Individual/Resident
+# Register Individual/Resident
 POST {{baseUrl}}/registers/resident
 Content-Type: application/json
 
 {
     "nricNumber": "881223145678",
+    "tinNumber": "MA2819827D",
     "residentName": "Tan Kah Kow",
     "contactNumber": "012345678",
     "contactEmail": "tkk@maxpark.com",
@@ -13,6 +14,30 @@ Content-Type: application/json
     "residentAddressLine2": "",
     "plateNumber": "WSS9899",
     "vehicleType": "1"
+}
+
+###
+# Register Individual/Resident Finalize
+POSt {{baseUrl}}/registers/resident/finalize
+Content-Type: application/json
+
+{
+    "nricNumber": "881223145678",
+    "tinNumber": "MA2819827D",
+    "residentName": "Tan Kah Kow",
+    "contactNumber": "012345678",
+    "contactEmail": "tkk@maxpark.com",
+    "residentAddressLine1": "10 Anson Road",
+    "residentAddressLine2": "",
+    "residentPlate":  {
+        "plateNumber": "WSS9899",
+        "vehicleType": "1",
+        "vehiclePath": "uploads/95fc22cc-ecb0-44a6-8246-4dbfed453e88/plates/WSS9899_vehicle_file.jpg"
+    },
+    "residentSupportingFiles": {
+        "spaPath": "uploads/95fc22cc-ecb0-44a6-8246-4dbfed453e88/plates/WSS9899_spa_file.jpg",
+        "electricBillPath": "uploads/95fc22cc-ecb0-44a6-8246-4dbfed453e88/plates/WSS9899_electricity_file.jpg"
+    }
 }
 
 ####
