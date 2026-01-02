@@ -26,7 +26,7 @@ type ResidentRegisterForm struct {
 	ContactEmail            string                  `json:"contactEmail" validate:"required,email"`
 	ResidentAddressLine1    string                  `json:"residentAddressLine1" validate:"required,min=5,max=100"`
 	ResidentAddressLine2    string                  `json:"residentAddressLine2,omitempty" validate:"max=100"` // optional
-	NricNumber              string                  `json:"nric,omitempty"`                                    // optional
+	NricNumber              string                  `json:"nricNumber,omitempty"`                              // optional
 	TinNumber               string                  `json:"tinNumber,omitempty"`                               // optional
 	ResidentPlates          ResidentPlates          `json:"residentPlate"`
 	ResidentSupportingFiles ResidentSupportingFiles `json:"residentSupportingFiles"`
@@ -257,15 +257,18 @@ func handleCreateResidentRegisterFinalize(c echo.Context) error {
 	}
 
 	natsPayload := map[string]interface{}{
-		"nric":          form.NricNumber,
-		"tinNumber":     form.TinNumber,
-		"fullName":      form.ResidentName,
-		"email":         form.ContactEmail,
-		"contactNumber": form.ContactNumber,
-		"address1":      form.ResidentAddressLine1,
-		"address2":      form.ResidentAddressLine2,
-		"vehicleNum":    form.ResidentPlates.PlateNumber,
-		"vehicleClass":  form.ResidentPlates.VehicleType,
+		"nric":             form.NricNumber,
+		"tinNumber":        form.TinNumber,
+		"fullName":         form.ResidentName,
+		"email":            form.ContactEmail,
+		"contactNumber":    form.ContactNumber,
+		"address1":         form.ResidentAddressLine1,
+		"address2":         form.ResidentAddressLine2,
+		"vehicleNum":       form.ResidentPlates.PlateNumber,
+		"vehicleClass":     form.ResidentPlates.VehicleType,
+		"vehiclePath":      form.ResidentPlates.VehiclePath,
+		"spaPath":          form.ResidentSupportingFiles.SPAPath,
+		"electricBillPath": form.ResidentSupportingFiles.ElectricBillPath,
 	}
 
 	data, err := json.Marshal(natsPayload)

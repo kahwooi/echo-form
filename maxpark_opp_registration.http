@@ -1,7 +1,7 @@
 @baseUrl = http://localhost:8081
 
-# Register Individual/Resident
-POST {{baseUrl}}/registers/resident
+# 1. Start by registering Individual/Resident to get a registerId
+ POST {{baseUrl}}/registers/resident
 Content-Type: application/json
 
 {
@@ -12,13 +12,20 @@ Content-Type: application/json
     "contactEmail": "tkk@maxpark.com",
     "residentAddressLine1": "10 Anson Road",
     "residentAddressLine2": "",
-    "plateNumber": "WSS9899",
-    "vehicleType": "1"
+    "residentPlate": {
+        "plateNumber": "WSS9899",
+        "vehicleType": "1"
+    }
 }
 
 ###
-# Register Individual/Resident Finalize
-POSt {{baseUrl}}/registers/resident/finalize
+# 2. Presigned URL for individual/resident file upload using registerId from previous step
+GET {{baseUrl}}/presigned?registerId=/35c7b59f-046c-4622-8025-56cdb6fe10f5&fileType=plate&fileName=spa_file.jpg&plateNumber=WSS9899
+
+
+###
+# 3. Finalize Individual/Resident registration
+POST {{baseUrl}}/registers/resident/finalize
 Content-Type: application/json
 
 {
@@ -32,16 +39,16 @@ Content-Type: application/json
     "residentPlate":  {
         "plateNumber": "WSS9899",
         "vehicleType": "1",
-        "vehiclePath": "uploads/95fc22cc-ecb0-44a6-8246-4dbfed453e88/plates/WSS9899_vehicle_file.jpg"
+        "vehiclePath": "uploads/35c7b59f-046c-4622-8025-56cdb6fe10f5/plates/WSS9899_vehicle_file.jpg"
     },
     "residentSupportingFiles": {
-        "spaPath": "uploads/95fc22cc-ecb0-44a6-8246-4dbfed453e88/plates/WSS9899_spa_file.jpg",
-        "electricBillPath": "uploads/95fc22cc-ecb0-44a6-8246-4dbfed453e88/plates/WSS9899_electricity_file.jpg"
+        "spaPath": "uploads/35c7b59f-046c-4622-8025-56cdb6fe10f5/plates/WSS9899_spa_file.jpg",
+        "electricBillPath": "uploads/35c7b59f-046c-4622-8025-56cdb6fe10f5/plates/WSS9899_electricity_file.jpg"
     }
 }
 
 ####
-# Register Company
+# 1. Start by registrating Company to get a registerId
 POST {{baseUrl}}/registers/company
 Content-Type: application/json
 
@@ -63,15 +70,11 @@ Content-Type: application/json
 }
 
 ###
-# Presigned URL for individual/resident file upload
-GET {{baseUrl}}/presigned?registerId=95fc22cc-ecb0-44a6-8246-4dbfed453e88&fileType=plate&fileName=spa_file.jpg&plateNumber=WSS9899
-
-###
-# Presigned URL for company file upload
+# 2. Presigned URL for company file upload using registerId from previous step
 GET {{baseUrl}}/presigned?registerId=95fc22cc-ecb0-44a6-8246-4dbfed453e88&fileType=general&fileName=spa_file.jpg&employerId=E000000227
 
 ###
-# Register Company Finalize
+# 3. Finalize Company registration
 POST {{baseUrl}}/registers/company/finalize
 Content-Type: application/json
 
