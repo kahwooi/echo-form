@@ -20,7 +20,7 @@ Content-Type: application/json
 
 ###
 # 2. Presigned URL for individual/resident file upload using registerId from previous step
-GET {{baseUrl}}/presigned?registerId=/35c7b59f-046c-4622-8025-56cdb6fe10f5&fileType=plate&fileName=spa_file.jpg&plateNumber=WSS9899
+GET {{baseUrl}}/presigned?registerId=35c7b59f-046c-4622-8025-56cdb6fe10f5&fileType=plate&fileName=M2U_20251203_1412.pdf&plateNumber=WSS9899
 
 
 ###
@@ -71,7 +71,12 @@ Content-Type: application/json
 
 ###
 # 2. Presigned URL for company file upload using registerId from previous step
-GET {{baseUrl}}/presigned?registerId=95fc22cc-ecb0-44a6-8246-4dbfed453e88&fileType=general&fileName=spa_file.jpg&employerId=E000000227
+GET {{baseUrl}}/presigned?registerId=95fc22cc-ecb0-44a6-8246-4dbfed453e88&fileType=general&fileName=M2U_20251203_1412.pdf&employerId=E000000227&contentType=application%2Fpdf
+
+### Upload PDF using presigned URL
+PUT https://maxpark-opp-registration.oss-ap-southeast-3.aliyuncs.com/E000000227_M2U_20251203_1412.pdf?Expires=1767713149\u0026OSSAccessKeyId=LTAI5tJmXxFAiCr31QRFCTo6\u0026Signature=u%2F%2B0QMpOv1pUcVYvXCl0mMh3c2I%3D
+
+< C:/Users/kahwo/Downloads/M2U_20251203_1412.pdf
 
 ###
 # 3. Finalize Company registration

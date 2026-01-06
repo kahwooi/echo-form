@@ -65,7 +65,11 @@ interface CreateResidentRequest {
 }
 
 interface CreateResidentResponse {
-    id: string;
+    success: boolean;
+    message: string;
+    data: {
+        registerID: string;
+    };
 }
 
 interface PlateFileEntry {
@@ -282,7 +286,7 @@ export function ResidentForm() {
                         });
 
                         // Upload to OSS
-                        await putFileToOSS(data.url, file.originFileObj as RcFile, 
+                        await putFileToOSS(data.data.url, file.originFileObj as RcFile, 
                             (event) => updateProgress(event, fileUid));
 
                         // Update UI state
@@ -353,7 +357,7 @@ export function ResidentForm() {
                         });
 
                         // Upload to OSS
-                        await putFileToOSS(data.url, file.originFileObj as RcFile,
+                        await putFileToOSS(data.data.url, file.originFileObj as RcFile,
                             (event) => updateProgress(event, fileUid));
 
                         // Update UI state
@@ -465,10 +469,10 @@ export function ResidentForm() {
                 } as CreateResidentRequest
             );
 
-            const residentId = createResponse.data.id;
+            const residentId = createResponse.data.data.registerID;
             message.destroy();
             message.success(`Resident created (ID: ${residentId}). Starting uploads...`);
-
+           
             // Step 2: Upload Files
             const results = await processUploadQueue(residentId, values);
 
