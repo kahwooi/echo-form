@@ -3,7 +3,6 @@ import {
     ArrowLeftOutlined,
     CheckCircleOutlined,
     ExclamationCircleOutlined,
-    UploadOutlined
 } from "@ant-design/icons";
 import { Turnstile } from "@marsidev/react-turnstile";
 import {
@@ -20,12 +19,11 @@ import {
     Divider,
     Row,
     Col,
-    Alert,
     Tag,
     Space,
     Select,
     Checkbox,
-    Upload
+    Alert, // Added Alert component
 } from "antd";
 import type { RcFile } from "antd/es/upload";
 import Dragger from "antd/es/upload/Dragger";
@@ -39,7 +37,6 @@ type CustomUploadFile = UploadFile & {
     response?: {
         ossKey: string;
     };
-    fileType: 'spa' | 'bill'; // Resident-specific document types
 };
 
 type ResidentFormValues = {
@@ -75,12 +72,12 @@ interface CreateResidentResponse {
 interface PlateFileEntry {
     plateNumber: string;
     vehicleType: string;
-    fileKey: string;
+    vechiclePath: string;
 }
 
 interface SupportingFileEntry {
-    fileKey: string;
-    type: 'spa' | 'bill';
+    spaPath: string;
+    electricBillPath: string;
 }
 
 interface FinalizeResidentRequest {
@@ -92,7 +89,7 @@ interface FinalizeResidentRequest {
     plateNumber: string;
     vehicleType: string;
     residentPlate: PlateFileEntry;
-    residentSupportingFiles: SupportingFileEntry[];
+    residentSupportingFiles: SupportingFileEntry;
 }
 
 interface FinalizeResidentResponse {
@@ -100,19 +97,12 @@ interface FinalizeResidentResponse {
 }
 
 interface UploadResult {
-    type: 'supporting' | 'vehicle';
+    type: 'electricity' | 'spa' | 'vehicle';
     uid: string;
     originalName: string;
     ossKey?: string;
     error?: Error;
-    fileType?: 'spa' | 'bill';
 }
-
-// Fixed document types for resident
-const fixedDocumentTypes: { key: 'spa' | 'bill', label: string, required: boolean }[] = [
-    { key: 'spa', label: 'SPA or Tenancy Agreement', required: true },
-    { key: 'bill', label: 'Electricity Bill', required: true },
-];
 
 const vehicleOptions = [
     { value: '1', label: 'Class 1' },
@@ -131,15 +121,16 @@ const siteKey = process.env.BUN_PUBLIC_TURNSTILE_SITE_KEY || '';
 export function ResidentForm() {
     const [form] = Form.useForm();
     const [config, setConfig] = useState({
-        maxGeneralFiles: 2, // Max 2 supporting documents (SPA + Bill)
+        maxGeneralFiles: 1,
         concurrentUploads: 2,
         maxFileSizeMB: 100,
-        allowedTypes: ['image/', 'application/pdf', 'text/plain']
+        allowedTypes: ['image/', 'application/pdf']
     });
 
     // State for files - simplified for resident
-    const [supportingFileList, setSupportingFileList] = useState<CustomUploadFile[]>([]);
     const [vehicleFileList, setVehicleFileList] = useState<CustomUploadFile[]>([]);
+    const [spaFileList, setSpaFileList] = useState<CustomUploadFile[]>([]);
+    const [electricityBillFileList, setElectricityBillFileList] = useState<CustomUploadFile[]>([]);
     
     // Upload state
     const [uploading, setUploading] = useState(false);
@@ -152,7 +143,10 @@ export function ResidentForm() {
         const fetchConfig = async () => {
             try {
                 const response = await axios.get(`${apiBase}/config`);
-                setConfig(response.data);
+                setConfig(prevConfig => ({
+                    ...prevConfig,
+                    ...response.data
+                }));
             } catch (error) {
                 console.error("Failed to fetch config:", error);
             }
@@ -161,21 +155,17 @@ export function ResidentForm() {
     }, []);
 
     // --- File Handlers ---
-    const handleSupportingFileChange: UploadProps['onChange'] = ({ fileList }) => {
-        // Add fileType to each file
-        const updatedList = fileList.map(file => ({
-            ...file,
-            // Determine file type based on some logic, or let user specify
-            // For simplicity, we'll assume all supporting files are 'general' type
-            fileType: 'spa' as 'spa' // You might want to improve this logic
-        })) as CustomUploadFile[];
-        
-        setSupportingFileList(updatedList);
+    const handleElectricityBillFileChange: UploadProps['onChange'] = ({ fileList }) => {
+        setElectricityBillFileList(fileList as CustomUploadFile[]);
     };
 
     const handleVehicleFileChange: UploadProps['onChange'] = ({ fileList }) => {
         setVehicleFileList(fileList as CustomUploadFile[]);
     };
+
+    const handleSpaFileChange: UploadProps['onChange'] = ({ fileList }) => {
+        setSpaFileList(fileList as CustomUploadFile[]);
+    }
 
     const dummyRequest: UploadProps['customRequest'] = ({ onSuccess }) => {
         setTimeout(() => { if (onSuccess) onSuccess("ok"); }, 0);
@@ -183,7 +173,7 @@ export function ResidentForm() {
 
     // --- Upload Functions ---
     const putFileToOSS = async (signedUrl: string, file: RcFile, onProgress?: (event: AxiosProgressEvent) => void) => {
-        await axios.put(signedUrl, file, {
+        const { data } = await axios.put(signedUrl, file, {
             headers: {
                 'Content-Type': file.type || 'application/octet-stream',
             },
@@ -217,7 +207,7 @@ export function ResidentForm() {
                 const fileName = file.name.toLowerCase();
                 const extension = fileName.split('.').pop();
                 
-                const allowedExtensions = ['.jpg', '.jpeg', '.png', '.pdf', '.doc', '.docx', '.txt'];
+                const allowedExtensions = ['.jpg', '.jpeg', '.png', '.pdf'];
                 if (extension && !allowedExtensions.some(ext => fileName.endsWith(ext))) {
                     return 'File type not recognized. Allowed: PDF, JPG, PNG, DOC, TXT';
                 }
@@ -236,10 +226,7 @@ export function ResidentForm() {
                     fileName.endsWith('.pdf') || 
                     fileName.endsWith('.jpg') || 
                     fileName.endsWith('.jpeg') || 
-                    fileName.endsWith('.png') || 
-                    fileName.endsWith('.doc') || 
-                    fileName.endsWith('.docx') || 
-                    fileName.endsWith('.txt');
+                    fileName.endsWith('.png')
                 
                 if (!isExtensionAllowed) {
                     return `File type not allowed. Allowed types: ${allowedTypes.join(', ')}`;
@@ -256,79 +243,6 @@ export function ResidentForm() {
     // Process all uploads with concurrency control
     const processUploadQueue = async (residentId: string, values: ResidentFormValues): Promise<UploadResult[]> => {
         const uploadTasks: Promise<UploadResult>[] = [];
-
-        // Prepare supporting file upload tasks
-        supportingFileList.forEach((file, index) => {
-            if (file.originFileObj && file.status !== 'done') {
-                const task = async (): Promise<UploadResult> => {
-                    const fileUid = file.uid;
-                    const originalName = file.name;
-                    // Assign document type based on position or let backend handle it
-                    const fileType = index === 0 ? 'spa' : 'bill';
-
-                    try {
-                        // Validate file
-                        const validationError = validateFile(file.originFileObj as RcFile);
-                        if (validationError) {
-                            throw new Error(validationError);
-                        }
-
-                        // Get presigned URL for supporting document
-                        const { data } = await axios.get(`${apiBase}/presigned`, {
-                            params: {
-                                registerId: residentId,
-                                fileType: 'general',
-                                documentType: fileType, // Specify SPA or Bill
-                                fileName: file.name,
-                                contentType: file.type || 'application/octet-stream',
-                                turnstileToken: turnstileToken
-                            }
-                        });
-
-                        // Upload to OSS
-                        await putFileToOSS(data.data.url, file.originFileObj as RcFile, 
-                            (event) => updateProgress(event, fileUid));
-
-                        // Update UI state
-                        setSupportingFileList(prev => 
-                            prev.map(f => f.uid === fileUid 
-                                ? { ...f, status: 'done', response: { ossKey: data.key }, fileType }
-                                : f
-                            )
-                        );
-
-                        return {
-                            type: 'supporting',
-                            uid: fileUid,
-                            originalName,
-                            ossKey: data.key,
-                            fileType
-                        };
-
-                    } catch (error) {
-                        console.error(`Upload failed for ${originalName}:`, error);
-                        
-                        // Update UI state
-                        setSupportingFileList(prev => 
-                            prev.map(f => f.uid === fileUid 
-                                ? { ...f, status: 'error', error: error as Error }
-                                : f
-                            )
-                        );
-
-                        return {
-                            type: 'supporting',
-                            uid: fileUid,
-                            originalName,
-                            error: error as Error,
-                            fileType
-                        };
-                    }
-                };
-
-                uploadTasks.push(task());
-            }
-        });
 
         // Prepare vehicle file upload task (single file)
         vehicleFileList.forEach(file => {
@@ -363,7 +277,7 @@ export function ResidentForm() {
                         // Update UI state
                         setVehicleFileList(prev => 
                             prev.map(f => f.uid === fileUid
-                                ? { ...f, status: 'done', response: { ossKey: data.key } }
+                                ? { ...f, status: 'done', response: { ossKey: data.data.key } }
                                 : f
                             )
                         );
@@ -372,7 +286,7 @@ export function ResidentForm() {
                             type: 'vehicle',
                             uid: fileUid,
                             originalName,
-                            ossKey: data.key
+                            ossKey: data.data.key
                         };
 
                     } catch (error) {
@@ -399,7 +313,143 @@ export function ResidentForm() {
             }
         });
 
-        // Execute with concurrency control (same as company form)
+        // Prepare SPA/Tenancy Agreement file upload tasks (multiple files)
+        spaFileList.forEach((file, index) => {
+            if (file.originFileObj && file.status !== 'done') {
+                const task = async (): Promise<UploadResult> => {
+                    const fileUid = file.uid;
+                    const originalName = file.name;
+
+                    try {
+                        // Validate file
+                        const validationError = validateFile(file.originFileObj as RcFile);
+                        if (validationError) {
+                            throw new Error(validationError);
+                        }
+
+                        // Get presigned URL for supporting document
+                        const { data } = await axios.get(`${apiBase}/presigned`, {
+                            params: {
+                                registerId: residentId,
+                                fileType: 'general',
+                                fileName: file.name,
+                                contentType: file.type || 'application/octet-stream',
+                                turnstileToken: turnstileToken
+                            }
+                        });
+
+                        // Upload to OSS
+                        await putFileToOSS(data.data.url, file.originFileObj as RcFile, 
+                            (event) => updateProgress(event, fileUid));
+
+                        // Update UI state
+                        setSpaFileList(prev => 
+                            prev.map(f => f.uid === fileUid
+                                ? { ...f, status: 'done', response: { ossKey: data.data.key } }
+                                : f
+                            )
+                        );
+
+                        return {
+                            type: 'spa',
+                            uid: fileUid,
+                            originalName,
+                            ossKey: data.data.key
+                        };
+
+                    } catch (error) {
+                        console.error(`Upload failed for SPA/Tenancy Agreement ${originalName}:`, error);
+
+                        // Update UI state
+                        setSpaFileList(prev => 
+                            prev.map(f => f.uid === fileUid
+                                ? { ...f, status: 'error', error: error as Error }
+                                : f
+                            )
+                        );
+
+                        return {
+                            type: 'spa',
+                            uid: fileUid,
+                            originalName,
+                            error: error as Error
+                        };
+                    }
+                };
+
+                uploadTasks.push(task());
+            }
+        });
+
+        // Prepare electricity bill file upload task (single file)
+        electricityBillFileList.forEach((file, index) => {
+            if (file.originFileObj && file.status !== 'done') {
+                const task = async (): Promise<UploadResult> => {
+                    const fileUid = file.uid;
+                    const originalName = file.name;
+
+                    try {
+                        // Validate file
+                        const validationError = validateFile(file.originFileObj as RcFile);
+                        if (validationError) {
+                            throw new Error(validationError);
+                        }
+
+                        // Get presigned URL for supporting document
+                        const { data } = await axios.get(`${apiBase}/presigned`, {
+                            params: {
+                                registerId: residentId,
+                                fileType: 'general',
+                                fileName: file.name,
+                                contentType: file.type || 'application/octet-stream',
+                                turnstileToken: turnstileToken
+                            }
+                        });
+
+                        // Upload to OSS
+                        await putFileToOSS(data.data.url, file.originFileObj as RcFile, 
+                            (event) => updateProgress(event, fileUid));
+
+                        // Update UI state
+                        setElectricityBillFileList(prev => 
+                            prev.map(f => f.uid === fileUid 
+                                ? { ...f, status: 'done', response: { ossKey: data.data.key } }
+                                : f
+                            )
+                        );
+
+                        return {
+                            type: 'electricity',
+                            uid: fileUid,
+                            originalName,
+                            ossKey: data.data.key
+                        };
+
+                    } catch (error) {
+                        console.error(`Upload failed for ${originalName}:`, error);
+                        
+                        // Update UI state
+                        setElectricityBillFileList(prev => 
+                            prev.map(f => f.uid === fileUid 
+                                ? { ...f, status: 'error', error: error as Error }
+                                : f
+                            )
+                        );
+
+                        return {
+                            type: 'electricity',
+                            uid: fileUid,
+                            originalName,
+                            error: error as Error,
+                        };
+                    }
+                };
+
+                uploadTasks.push(task());
+            }
+        });
+
+        // Execute with concurrency control
         const results: UploadResult[] = [];
         const queue = [...uploadTasks];
         
@@ -424,6 +474,75 @@ export function ResidentForm() {
         return results;
     };
 
+    // --- Render Upload Status ---
+    const renderUploadStatus = () => {
+        if (uploadResults.length === 0) return null;
+
+        const successful = uploadResults.filter(r => r.ossKey).length;
+        const failed = uploadResults.filter(r => r.error).length;
+        const total = uploadResults.length;
+
+        return (
+            <Card size="small" style={{ marginBottom: 16 }}>
+                <Space style={{ width: '100%' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Text strong>Upload Status</Text>
+                        <Text type={failed > 0 ? "danger" : "success"}>
+                            {successful}/{total} successful
+                        </Text>
+                    </div>
+                    
+                    {uploadResults.map((result, index) => (
+                        <div key={index} style={{ 
+                            display: 'flex', 
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            padding: '4px 0',
+                            borderBottom: '1px solid #f0f0f0'
+                        }}>
+                            <Space>
+                                {result.ossKey ? (
+                                    <CheckCircleOutlined style={{ color: '#52c41a' }} />
+                                ) : (
+                                    <ExclamationCircleOutlined style={{ color: '#ff4d4f' }} />
+                                )}
+                                <Text>
+                                    {result.originalName}
+                                    <Tag color={getTagColor(result.type)} style={{ marginLeft: 8 }}>
+                                        {getDocumentTypeLabel(result.type)}
+                                    </Tag>
+                                </Text>
+                            </Space>
+                            <Text type={result.ossKey ? "success" : "danger"}>
+                                {result.ossKey ? '✓' : `✗ ${result.error?.message}`}
+                            </Text>
+                        </div>
+                    ))}
+                </Space>
+            </Card>
+        );
+    };
+
+    // Helper function to get tag color based on document type
+    const getTagColor = (type: UploadResult['type']) => {
+        switch (type) {
+            case 'vehicle': return 'blue';
+            case 'spa': return 'green';
+            case 'electricity': return 'orange';
+            default: return 'default';
+        }
+    };
+
+    // Helper function to get document type label
+    const getDocumentTypeLabel = (type: UploadResult['type']) => {
+        switch (type) {
+            case 'vehicle': return 'Vehicle';
+            case 'spa': return 'SPA/Tenancy';
+            case 'electricity': return 'Electricity Bill';
+            default: return type;
+        }
+    };
+
     // --- Form Submission ---
     const onFinish = async (values: ResidentFormValues) => {
         if (!turnstileToken) {
@@ -432,16 +551,22 @@ export function ResidentForm() {
         }
         
         // Check required documents
-        const hasSupportingFiles = supportingFileList.length >= 2; // Need SPA and Bill
         const hasVehicleFile = vehicleFileList.length > 0;
-
-        if (!hasSupportingFiles) {
-            message.error('Please attach both SPA/Tenancy Agreement and Electricity Bill.');
-            return;
-        }
+        const hasSpaFile = spaFileList.length > 0;
+        const hasElectricityBill = electricityBillFileList.length > 0;
 
         if (!hasVehicleFile) {
             message.error('Please attach vehicle document.');
+            return;
+        }
+
+        if (!hasSpaFile) {
+            message.error('Please attach SPA or Tenancy Agreement document.');
+            return;
+        }
+
+        if (!hasElectricityBill) {
+            message.error('Please attach Electricity Bill document.');
             return;
         }
 
@@ -462,10 +587,6 @@ export function ResidentForm() {
                     residentAddressLine2: values.residentAddressLine2,
                     plateNumber: values.plateNumber,
                     vehicleType: values.vehicleType,
-                    residentPlate: {
-                        plateNumber: values.plateNumber,
-                        vehicleType: values.vehicleType,
-                    }
                 } as CreateResidentRequest
             );
 
@@ -504,14 +625,18 @@ export function ResidentForm() {
             if (!vehicleUpload || !vehicleUpload.ossKey) {
                 throw new Error('Vehicle document not found in successful uploads');
             }
-
-            // Get supporting documents
-            const supportingFiles: SupportingFileEntry[] = successfulUploads
-                .filter(r => r.type === 'supporting' && r.ossKey && r.fileType)
-                .map(result => ({
-                    fileKey: result.ossKey!,
-                    type: result.fileType!
-                }));
+            
+            // Get SPA and electricity bill documents
+            const spaUpload = successfulUploads.find(r => r.type === 'spa');
+            const electricityUpload = successfulUploads.find(r => r.type === 'electricity');
+            
+            if (!spaUpload || !spaUpload.ossKey) {
+                throw new Error('SPA/Tenancy Agreement document not found');
+            }
+            
+            if (!electricityUpload || !electricityUpload.ossKey) {
+                throw new Error('Electricity Bill document not found');
+            }
 
             // Step 4: Finalize Resident
             message.loading('Finalizing resident registration...', 0);
@@ -528,9 +653,12 @@ export function ResidentForm() {
                     residentPlate: {
                         plateNumber: values.plateNumber,
                         vehicleType: values.vehicleType,
-                        fileKey: vehicleUpload.ossKey
+                        vechiclePath: vehicleUpload.ossKey
                     },
-                    residentSupportingFiles: supportingFiles,
+                    residentSupportingFiles: {
+                        spaPath: spaUpload.ossKey,
+                        electricBillPath: electricityUpload.ossKey
+                    },
                 } as FinalizeResidentRequest
             );
 
@@ -542,8 +670,9 @@ export function ResidentForm() {
 
             // Reset form
             form.resetFields();
-            setSupportingFileList([]);
             setVehicleFileList([]);
+            setSpaFileList([]);
+            setElectricityBillFileList([]);
             setUploadProgress({});
             setUploadResults([]);
             setTurnstileToken(null);
@@ -554,12 +683,10 @@ export function ResidentForm() {
             
             if (axios.isAxiosError(error)) {
                 if (error.response?.data?.errors?.errors) {
-                    // Handle the array of field errors
                     const fieldErrors = error.response.data.errors.errors;
                     const errorMessages = fieldErrors.map((err: any) => `${err.field}: ${err.message}`);
                     message.error(`Validation failed: ${errorMessages.join(', ')}`);
                 } else if (error.response?.data?.errors?.message) {
-                    // Show the general validation message
                     message.error(`Validation error: ${error.response.data.errors.message}`);
                 } else if (error.response?.data?.message) {
                     message.error(`Error: ${error.response.data.message}`);
@@ -573,57 +700,9 @@ export function ResidentForm() {
             } else {
                 message.error('An unknown error occurred');
             }
-                    } finally {
+        } finally {
             setUploading(false);
         }
-    };
-
-    // --- Render Upload Status ---
-    const renderUploadStatus = () => {
-        if (uploadResults.length === 0) return null;
-
-        const successful = uploadResults.filter(r => r.ossKey).length;
-        const failed = uploadResults.filter(r => r.error).length;
-        const total = uploadResults.length;
-
-        return (
-            <Card size="small" style={{ marginBottom: 16 }}>
-                <Space style={{ width: '100%' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <Text strong>Upload Status</Text>
-                        <Text type={failed > 0 ? "danger" : "success"}>
-                            {successful}/{total} successful
-                        </Text>
-                    </div>
-                    
-                    {uploadResults.map((result, index) => (
-                        <div key={index} style={{ 
-                            display: 'flex', 
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            padding: '4px 0',
-                            borderBottom: '1px solid #f0f0f0'
-                        }}>
-                            <Space>
-                                {result.ossKey ? (
-                                    <CheckCircleOutlined style={{ color: '#52c41a' }} />
-                                ) : (
-                                    <ExclamationCircleOutlined style={{ color: '#ff4d4f' }} />
-                                )}
-                                <Text>{result.originalName}</Text>
-                                <Tag color={result.type === 'vehicle' ? "blue" : "green"}>
-                                    {result.type === 'vehicle' ? 'Vehicle Doc' : 
-                                     result.fileType === 'spa' ? 'SPA/Tenancy' : 'Electricity Bill'}
-                                </Tag>
-                            </Space>
-                            <Text type={result.ossKey ? "success" : "danger"}>
-                                {result.ossKey ? '✓' : `✗ ${result.error?.message}`}
-                            </Text>
-                        </div>
-                    ))}
-                </Space>
-            </Card>
-        );
     };
 
     return (
@@ -645,7 +724,7 @@ export function ResidentForm() {
                     Resident Registration
                 </Title>
 
-                {/* Upload Status Summary */}
+                {/* Upload Status Summary - Added this section */}
                 {renderUploadStatus()}
 
                 {/* Main Form */}
@@ -757,10 +836,10 @@ export function ResidentForm() {
 
                     {/* Vehicle Document Upload */}
                     <Form.Item
-                        label="Vehicle Document"
-                        extra="Upload vehicle registration or related document"
+                        label="Vehicle Registration Document"
+                        extra={`Upload Vehicle Registration or related document. Allowed: PDF, JPG, PNG. Max size: ${config.maxFileSizeMB} MB`}
                     >
-                        <Upload
+                        <Dragger
                             name="vehicleFile"
                             maxCount={1}
                             fileList={vehicleFileList}
@@ -770,13 +849,13 @@ export function ResidentForm() {
                             listType="picture"
                             disabled={uploading}
                         >
-                            <Button 
-                                icon={<UploadOutlined />}
-                                disabled={uploading}
-                            >
-                                Upload Vehicle Document
-                            </Button>
-                        </Upload>
+                            <p className="ant-upload-drag-icon">
+                                <InboxOutlined />
+                            </p>
+                            <p className="ant-upload-text">
+                                Click or drag file to upload Vehicle Registration Document
+                            </p>
+                        </Dragger>
                         
                         {/* Progress for vehicle file */}
                         {uploading && vehicleFileList.map(file => (
@@ -807,17 +886,15 @@ export function ResidentForm() {
                         Supporting Documents
                     </Divider>
 
-                    {/* Supporting Files Upload - Simplified */}
                     <Form.Item
-                        label="Required Documents (SPA/Tenancy Agreement & Electricity Bill)"
-                        extra={`Upload both documents. Max ${config.maxGeneralFiles} files total. Allowed: PDF, JPG, PNG. Max size: ${config.maxFileSizeMB}MB`}
+                        label="SPA/Tenancy Agreement"
+                        extra={`Upload SPA/Tenancy Agreement. Allowed: PDF, JPG, PNG. Max size: ${config.maxFileSizeMB} MB`}
                     >
                         <Dragger
-                            name="supportingFiles"
-                            multiple
+                            name="spaFile"
                             maxCount={config.maxGeneralFiles}
-                            fileList={supportingFileList}
-                            onChange={handleSupportingFileChange}
+                            fileList={spaFileList}
+                            onChange={handleSpaFileChange}
                             beforeUpload={() => false}
                             customRequest={dummyRequest}
                             listType="picture"
@@ -827,37 +904,81 @@ export function ResidentForm() {
                                 <InboxOutlined />
                             </p>
                             <p className="ant-upload-text">
-                                Click or drag files to upload SPA/Tenancy Agreement and Electricity Bill
-                            </p>
-                            <p className="ant-upload-hint">
-                                Upload both required documents
+                                Click or drag file to upload SPA/Tenancy Agreement Document
                             </p>
                         </Dragger>
+
+                        {/* Progress for SPA/Tenancy Agreement file */}
+                        {uploading && spaFileList.map(file => (
+                            uploadProgress[file.uid] !== undefined && (
+                                <div key={file.uid} style={{ marginTop: 8 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                        <Text style={{ fontSize: 12 }}>
+                                            {file.name}
+                                            {file.status === 'done' && (
+                                                <Tag color="success" style={{ marginLeft: 8 }}>Uploaded</Tag>
+                                            )}
+                                        </Text>
+                                        <Text type="secondary" style={{ fontSize: 12 }}>
+                                            {uploadProgress[file.uid]}%
+                                        </Text>
+                                    </div>
+                                    <Progress
+                                        percent={uploadProgress[file.uid]}
+                                        size="small"
+                                        status={file.status === 'error' ? 'exception' : 'active'}
+                                    />
+                                </div>
+                            )
+                        ))}
                     </Form.Item>
 
-                    {/* Progress Bars for Supporting Files */}
-                    {uploading && supportingFileList.map(file => (
-                        uploadProgress[file.uid] !== undefined && (
-                            <div key={file.uid} style={{ marginBottom: 8 }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                    <Text style={{ fontSize: 12 }}>
-                                        {file.name}
-                                        {file.status === 'done' && (
-                                            <Tag color="success" style={{ marginLeft: 8 }}>Uploaded</Tag>
-                                        )}
-                                    </Text>
-                                    <Text type="secondary" style={{ fontSize: 12 }}>
-                                        {uploadProgress[file.uid]}%
-                                    </Text>
+                    <Form.Item
+                        label="Electricity Bill"
+                        extra={`Upload Electricity Bills. Allowed: PDF, JPG, PNG. Max size: ${config.maxFileSizeMB} MB`}
+                    >
+                        <Dragger
+                            name="electricityBillFile"
+                            maxCount={config.maxGeneralFiles}
+                            fileList={electricityBillFileList}
+                            onChange={handleElectricityBillFileChange}
+                            beforeUpload={() => false}
+                            customRequest={dummyRequest}
+                            listType="picture"
+                            disabled={uploading}
+                        >
+                            <p className="ant-upload-drag-icon">
+                                <InboxOutlined />
+                            </p>
+                            <p className="ant-upload-text">
+                                Click or drag files to upload Electricity Bill
+                            </p>
+                        </Dragger>
+
+                        {/* Progress for Electricity Bill file */}
+                        {uploading && electricityBillFileList.map(file => (
+                            uploadProgress[file.uid] !== undefined && (
+                                <div key={file.uid} style={{ marginTop: 8 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                        <Text style={{ fontSize: 12 }}>
+                                            {file.name}
+                                            {file.status === 'done' && (
+                                                <Tag color="success" style={{ marginLeft: 8 }}>Uploaded</Tag>
+                                            )}
+                                        </Text>
+                                        <Text type="secondary" style={{ fontSize: 12 }}>
+                                            {uploadProgress[file.uid]}%
+                                        </Text>
+                                    </div>
+                                    <Progress
+                                        percent={uploadProgress[file.uid]}
+                                        size="small"
+                                        status={file.status === 'error' ? 'exception' : 'active'}
+                                    />
                                 </div>
-                                <Progress
-                                    percent={uploadProgress[file.uid]}
-                                    size="small"
-                                    status={file.status === 'error' ? 'exception' : 'active'}
-                                />
-                            </div>
-                        )
-                    ))}
+                            )
+                        ))}
+                    </Form.Item>
 
                     <Divider>Terms and Conditions</Divider>
 
@@ -895,7 +1016,7 @@ export function ResidentForm() {
                                 onExpire={() => setTurnstileToken(null)}
                                 options={{
                                     theme: 'light',
-                                    size: 'normal'
+                                    size: 'flexible'
                                 }}
                             />
                         </div>
@@ -915,23 +1036,6 @@ export function ResidentForm() {
                             {uploading ? 'Processing...' : 'Submit Registration'}
                         </Button>
                     </Form.Item>
-
-                    {/* Status Alert */}
-                    {uploadResults.length > 0 && (
-                        <Alert
-                            message="Upload Summary"
-                            description={
-                                <div>
-                                    <p>Total files processed: {uploadResults.length}</p>
-                                    <p>Successful: <Tag color="success">{uploadResults.filter(r => r.ossKey).length}</Tag></p>
-                                    <p>Failed: <Tag color="error">{uploadResults.filter(r => r.error).length}</Tag></p>
-                                </div>
-                            }
-                            type={uploadResults.some(r => r.error) ? "warning" : "success"}
-                            showIcon
-                            style={{ marginTop: 16 }}
-                        />
-                    )}
                 </Form>
             </Card>
         </Layout>

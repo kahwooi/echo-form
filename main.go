@@ -202,7 +202,11 @@ func handleGetPresignedURL(c echo.Context) error {
 	case "plate":
 		objectKey = path.Join("uploads", registerId, "plates", fmt.Sprintf("%s_%s", plateNumber, fileName))
 	case "general":
-		objectKey = path.Join("uploads", registerId, "general", fmt.Sprintf("%s_%s", employerId, fileName))
+		if employerId == "" {
+			objectKey = path.Join("uploads", registerId, "general", fileName)
+		} else {
+			objectKey = path.Join("uploads", registerId, "general", fmt.Sprintf("%s_%s", employerId, fileName))
+		}
 	default:
 		return ErrorResponse(c, 400, "Invalid fileType", "fileType must be either 'plate' or 'general'")
 	}
