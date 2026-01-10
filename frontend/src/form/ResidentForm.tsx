@@ -199,10 +199,6 @@ export function ResidentForm() {
     }, []);
 
     // --- File Handlers ---
-    const handleElectricityBillFileChange: UploadProps['onChange'] = ({ fileList }) => {
-        setElectricityBillFileList(fileList as CustomUploadFile[]);
-    };
-
     const handleVehicleFileChange: UploadProps['onChange'] = ({ fileList }) => {
         setVehicleFileList(fileList as CustomUploadFile[]);
     };
@@ -210,6 +206,10 @@ export function ResidentForm() {
     const handleSpaFileChange: UploadProps['onChange'] = ({ fileList }) => {
         setSpaFileList(fileList as CustomUploadFile[]);
     }
+    
+    const handleElectricityBillFileChange: UploadProps['onChange'] = ({ fileList }) => {
+        setElectricityBillFileList(fileList as CustomUploadFile[]);
+    };
 
     const dummyRequest: UploadProps['customRequest'] = ({ onSuccess }) => {
         setTimeout(() => { if (onSuccess) onSuccess("ok"); }, 0);
@@ -253,13 +253,13 @@ export function ResidentForm() {
                 
                 const allowedExtensions = ['.jpg', '.jpeg', '.png', '.pdf'];
                 if (extension && !allowedExtensions.some(ext => fileName.endsWith(ext))) {
-                    return 'File type not recognized. Allowed: PDF, JPG, PNG, DOC, TXT';
+                    return 'File type not recognized. Allowed: PDF, JPG, PNG';
                 }
                 return null;
             }
 
             // Check file type against allowed types
-            const allowedTypes = config.allowedTypes || ['image/', 'application/pdf', 'text/plain'];
+            const allowedTypes = config.allowedTypes || ['image/', 'application/pdf'];
             const isAllowed = allowedTypes.some(allowedType => 
                 file.type?.startsWith(allowedType)
             );
@@ -288,7 +288,7 @@ export function ResidentForm() {
     const processUploadQueue = async (residentId: string, values: ResidentFormValues): Promise<UploadResult[]> => {
         const uploadTasks: Promise<UploadResult>[] = [];
 
-        // Prepare vehicle file upload task (single file)
+        // Prepare vehicle file upload task
         vehicleFileList.forEach(file => {
             if (file.originFileObj && file.status !== 'done') {
                 const task = async (): Promise<UploadResult> => {
@@ -357,7 +357,7 @@ export function ResidentForm() {
             }
         });
 
-        // Prepare SPA/Tenancy Agreement file upload tasks (multiple files)
+        // Prepare SPA/Tenancy Agreement file upload task
         spaFileList.forEach((file, index) => {
             if (file.originFileObj && file.status !== 'done') {
                 const task = async (): Promise<UploadResult> => {
@@ -425,7 +425,7 @@ export function ResidentForm() {
             }
         });
 
-        // Prepare electricity bill file upload task (single file)
+        // Prepare electricity bill file upload task
         electricityBillFileList.forEach((file, index) => {
             if (file.originFileObj && file.status !== 'done') {
                 const task = async (): Promise<UploadResult> => {
@@ -859,11 +859,11 @@ export function ResidentForm() {
                                 <Col xs={24} md={12}>
                                     <Form.Item
                                         name="tinNumber"
-                                        label="TIN Number"
+                                        label="Tax Identification Number (TIN)"
                                         rules={[{ required: false, message: 'Optional' }]}
                                     >
                                         <Input
-                                            placeholder="Enter TINT Number"
+                                            placeholder="Enter TIN"
                                             size={screens.xs ? 'middle' : 'large'}
                                             style={{ borderRadius: '8px' }}
                                         />
@@ -954,11 +954,11 @@ export function ResidentForm() {
                                 <Col xs={24} md={12}>
                                     <Form.Item
                                         name="vehicleType"
-                                        label="Vehicle Type"
+                                        label="Vehicle Class"
                                         rules={[{ required: true, message: 'Required' }]}
                                     >
                                         <Select 
-                                            placeholder="Select Vehicle Type" 
+                                            placeholder="Select Vehicle Class" 
                                             size={screens.xs ? 'middle' : 'large'}
                                             style={{ borderRadius: '8px' }}
                                         >
@@ -1083,7 +1083,7 @@ export function ResidentForm() {
                             {/* Electricity Bill */}
                             <Form.Item
                                 label="Electricity Bill"
-                                extra={`Upload Electricity Bills. Allowed: PDF, JPG, PNG. Max size: ${config.maxFileSizeMB} MB`}
+                                extra={`Upload Electricity Bill. Allowed: PDF, JPG, PNG. Max size: ${config.maxFileSizeMB} MB`}
                             >
                                 <Dragger
                                     name="electricityBillFile"
