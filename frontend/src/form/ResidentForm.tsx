@@ -112,6 +112,15 @@ interface UploadResult {
     error?: Error;
 }
 
+interface UploadTokenResponse {
+  success: boolean;
+  message: string;
+  data: {
+    uploadToken: string;
+    expiresIn: number;
+  };
+}
+
 const vehicleOptions = [
     { value: '1', label: 'Class 1' },
     { value: '2', label: 'Class 2' },
@@ -146,6 +155,8 @@ export function ResidentForm() {
     const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({});
     const [uploadResults, setUploadResults] = useState<UploadResult[]>([]);
     const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+
+    const [uploadToken, setUploadToken] = useState<string | null>(null);
 
     // Responsive configuration
     const getResponsiveConfig = () => {
@@ -311,6 +322,9 @@ export function ResidentForm() {
                                 fileName: file.name,
                                 contentType: file.type || 'application/octet-stream',
                                 turnstileToken: turnstileToken
+                            },
+                            headers: {
+                                Authorization: `Bearer ${uploadToken}`
                             }
                         });
 
@@ -379,6 +393,9 @@ export function ResidentForm() {
                                 fileName: file.name,
                                 contentType: file.type || 'application/octet-stream',
                                 turnstileToken: turnstileToken
+                            },
+                            headers: {
+                                Authorization: `Bearer ${uploadToken}`
                             }
                         });
 
@@ -447,6 +464,9 @@ export function ResidentForm() {
                                 fileName: file.name,
                                 contentType: file.type || 'application/octet-stream',
                                 turnstileToken: turnstileToken
+                            },
+                            headers: {
+                                Authorization: `Bearer ${uploadToken}`
                             }
                         });
 
@@ -584,6 +604,25 @@ export function ResidentForm() {
             case 'spa': return 'SPA/Tenancy';
             case 'electricity': return 'Electricity Bill';
             default: return type;
+        }
+    };
+
+    const getUploadToken = async (turnstileToken: string): Promise<string> => {
+        try {
+            const response = await axios.post<UploadTokenResponse>(
+            `${apiBase}/upload-token`,
+            {
+                turnstileToken
+            }
+            );
+            
+            if (response.data.success && response.data.data.uploadToken) {
+            return response.data.data.uploadToken;
+            }
+            throw new Error('Failed to get upload token');
+        } catch (error) {
+            console.error('Error getting upload token:', error);
+            throw error;
         }
     };
 
@@ -1183,12 +1222,28 @@ export function ResidentForm() {
                                 <div style={{ textAlign: 'center' }}>
                                     <Turnstile
                                         siteKey={siteKey}
-                                        onSuccess={(token) => setTurnstileToken(token)}
+                                        onSuccess={async (token) => {
+                                            setTurnstileToken(token);
+                                             try {
+                                                const jwtToken = await getUploadToken(token);
+                                                setUploadToken(jwtToken);
+                                                message.success('Security verification passed');
+                                            } catch (error) {
+                                                message.error('Failed to get upload authorization');
+                                                setTurnstileToken(null);
+                                                setUploadToken(null);
+                                            }
+                                        }}  
                                         onError={() => {
                                             setTurnstileToken(null);
+                                            setUploadToken(null);
                                             message.error('Security verification failed');
                                         }}
-                                        onExpire={() => setTurnstileToken(null)}
+                                        onExpire={() => {
+                                            setTurnstileToken(null);
+                                            setUploadToken(null);
+                                            message.error('Security verification expired');
+                                        }}
                                         options={{
                                             theme: 'light',
                                             size: screens.xs ? 'compact' : 'normal'
@@ -1205,7 +1260,7 @@ export function ResidentForm() {
                                     size={screens.xs ? 'middle' : 'large'}
                                     block
                                     loading={uploading}
-                                    disabled={!turnstileToken}
+                                    disabled={!uploadToken}
                                     icon={uploading ? null : <CheckCircleOutlined />}
                                     style={{
                                         height: screens.xs ? '44px' : '48px',
