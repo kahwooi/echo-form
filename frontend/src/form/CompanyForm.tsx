@@ -130,6 +130,15 @@ interface UploadResult {
     subType?: 'spa' | 'electricBill' | 'vehicle';
 }
 
+interface UploadTokenResponse {
+  success: boolean;
+  message: string;
+  data: {
+    uploadToken: string;
+    expiresIn: number;
+  };
+}
+
 // Update PlateFileList type to track three separate files per vehicle
 type PlateFileList = Record<number, {
     spaFile?: CustomUploadFile[];
@@ -173,6 +182,8 @@ export function CompanyForm() {
     const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({});
     const [uploadResults, setUploadResults] = useState<UploadResult[]>([]);
     const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+
+    const [uploadToken, setUploadToken] = useState<string | null>(null);
 
     // Responsive configuration
     const getResponsiveConfig = () => {
@@ -372,6 +383,9 @@ export function CompanyForm() {
                                     fileName: `spa_${file.name}`,
                                     plateNumber: encodeURIComponent(plateNumber.plateNumber),
                                     contentType: file.type || 'application/octet-stream'
+                                },
+                                headers: {
+                                    Authorization: `Bearer ${uploadToken}`
                                 }
                             });
 
@@ -452,6 +466,9 @@ export function CompanyForm() {
                                     fileName: `electric_bill_${file.name}`,
                                     plateNumber: encodeURIComponent(plateNumber.plateNumber),
                                     contentType: file.type || 'application/octet-stream'
+                                },
+                                headers: {
+                                    Authorization: `Bearer ${uploadToken}`
                                 }
                             });
 
@@ -532,6 +549,9 @@ export function CompanyForm() {
                                     fileName: `vehicle_${file.name}`,
                                     plateNumber: encodeURIComponent(plateNumber.plateNumber),
                                     contentType: file.type || 'application/octet-stream'
+                                },
+                                headers: {
+                                    Authorization: `Bearer ${uploadToken}`
                                 }
                             });
 
@@ -611,7 +631,10 @@ export function CompanyForm() {
                                 fileType: 'general',
                                 fileName: file.name,
                                 contentType: file.type || 'application/octet-stream'
-                            }
+                            },
+                            headers: {
+                                Authorization: `Bearer ${uploadToken}`
+                            }   
                         });
 
                         await putFileToOSS(data.data.url, file.originFileObj as RcFile, 
@@ -673,6 +696,9 @@ export function CompanyForm() {
                                 fileType: 'general',
                                 fileName: file.name,
                                 contentType: file.type || 'application/octet-stream'
+                            },
+                            headers: {
+                                Authorization: `Bearer ${uploadToken}`
                             }
                         });
 
@@ -735,6 +761,9 @@ export function CompanyForm() {
                                 fileType: 'general',
                                 fileName: file.name,
                                 contentType: file.type || 'application/octet-stream'
+                            },
+                            headers: {
+                                Authorization: `Bearer ${uploadToken}`
                             }
                         });
 
@@ -801,6 +830,24 @@ export function CompanyForm() {
         setUploadResults(results);
         
         return results;
+    };
+
+    // -- Get Upload Toke --
+    const getUploadToken = async (turnstileToken: string): Promise<string> => {
+        try {
+            const response = await axios.post<UploadTokenResponse>(
+                `${apiBase}/upload-token`,
+                { turnstileToken }
+            );
+            
+            if (response.data.success && response.data.data.uploadToken) {
+            return response.data.data.uploadToken;
+            }
+            throw new Error('Failed to get upload token');
+        } catch (error) {
+            console.error("Failed to get upload token:", error);
+            throw error;
+        }
     };
 
     // --- Form Submission ---
@@ -1603,15 +1650,31 @@ export function CompanyForm() {
                                 <div style={{ textAlign: 'center' }}>
                                     <Turnstile
                                         siteKey={siteKey}
-                                        onSuccess={(token) => setTurnstileToken(token)}
+                                        onSuccess={ async (token) => { 
+                                            setTurnstileToken(token);
+                                            try {
+                                                const jsonToken = await getUploadToken(token);
+                                                setUploadToken(jsonToken);
+                                                message.success('Security verification passed');
+                                            } catch (error) {
+                                                message.error('Failed to get upload authorization');
+                                                setUploadToken(null);
+                                                setTurnstileToken(null);
+                                            }
+                                        }}
                                         onError={() => {
                                             setTurnstileToken(null);
+                                            setUploadToken(null);
                                             message.error('Security verification failed');
                                         }}
-                                        onExpire={() => setTurnstileToken(null)}
+                                        onExpire={() => {
+                                            setTurnstileToken(null)
+                                            setUploadToken(null);
+                                            message.warning('Security verification expired');
+                                        }}
                                         options={{
                                             theme: 'light',
-                                            size: 'normal'
+                                            size: screens.xs ? 'compact' : 'normal'
                                         }}
                                     />
                                 </div>

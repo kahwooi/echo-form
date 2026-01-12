@@ -607,13 +607,12 @@ export function ResidentForm() {
         }
     };
 
+    // --- Get Upload Token ---
     const getUploadToken = async (turnstileToken: string): Promise<string> => {
         try {
             const response = await axios.post<UploadTokenResponse>(
-            `${apiBase}/upload-token`,
-            {
-                turnstileToken
-            }
+                `${apiBase}/upload-token`,
+                { turnstileToken }
             );
             
             if (response.data.success && response.data.data.uploadToken) {
@@ -1222,7 +1221,7 @@ export function ResidentForm() {
                                 <div style={{ textAlign: 'center' }}>
                                     <Turnstile
                                         siteKey={siteKey}
-                                        onSuccess={async (token) => {
+                                        onSuccess={ async (token) => {
                                             setTurnstileToken(token);
                                              try {
                                                 const jwtToken = await getUploadToken(token);
