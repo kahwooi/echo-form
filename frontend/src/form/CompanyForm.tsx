@@ -28,12 +28,14 @@ import {
     Space,
     Select,
     Checkbox,
-    Grid
+    Grid,
+    Spin
 } from "antd";
 import type { RcFile } from "antd/es/upload";
 import Dragger from "antd/es/upload/Dragger";
 import axios, { type AxiosProgressEvent } from "axios";
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
 const { Title, Text } = Typography;
 const { useBreakpoint } = Grid;
@@ -157,18 +159,22 @@ const vehicleOptions = [
 ];
 
 // --- Config ---
-const apiBase = process.env.BUN_PUBLIC_OPP_API_BASE || "http://localhost:8081";
+const apiBase = process.env.BUN_PUBLIC_OPP_API_BASE;
+const apiParkingBase = process.env.BUN_PUBLIC_PARKING_API_BASE;
 const siteKey = process.env.BUN_PUBLIC_TURNSTILE_SITE_KEY || '';
 
 export function CompanyForm() {
     const [form] = Form.useForm();
     const screens = useBreakpoint();
+    const [searchParams] = useSearchParams();
+    const [configLoading, setConfigLoading] = useState(true);
     const [config, setConfig] = useState({
         maxGeneralFiles: 1,
         maxPlateNumbers: 5,
         concurrentUploads: 2,
         maxFileSizeMB: 100,
-        allowedTypes: ['image/', 'application/pdf']
+        allowedTypes: ['image/', 'application/pdf'],
+        enableRegistration: true,
     });
 
     // State for files - updated to track three separate files per vehicle
@@ -222,15 +228,26 @@ export function CompanyForm() {
 
     // Fetch config
     useEffect(() => {
+        const parkingLocationId = searchParams.get("id");
         const fetchConfig = async () => {
             try {
-                const response = await axios.get(`${apiBase}/config`);
+                const response = await axios.get(`${apiParkingBase}/api/public/parking-locations/settings`, {
+                    params: {
+                        id: parkingLocationId
+                    }
+                });
                 setConfig(prevConfig => ({
                     ...prevConfig,
-                    ...response.data
+                    enableRegistration: response.data.enable_registration || false,
                 }));
             } catch (error) {
                 console.error("Failed to fetch config:", error);
+                setConfig(prevConfig => ({
+                    ...prevConfig,
+                    enableRegistration: false,
+                }));
+            } finally {
+                setConfigLoading(false)
             }
         };
         fetchConfig();
@@ -1112,6 +1129,63 @@ export function CompanyForm() {
             </Card>
         );
     };
+
+     // Show loading state while config is being fetched
+    if (configLoading) {
+        return (
+            <Layout style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+                <Content style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                    <Card style={{ textAlign: 'center', padding: '40px' }}>
+                        <Spin size="large" />
+                        <div style={{ fontSize: '24px', marginBottom: '16px' }}>Loading...</div>
+                    </Card>
+                </Content>
+            </Layout>
+        );
+    }
+
+    // Show registration closed message
+    if (!config.enableRegistration) {
+         return (
+            <Layout
+            style={{
+                minHeight: '100vh',
+                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            }}
+        >
+                <Content
+                    style={{
+                        padding: responsiveConfig.layout.containerPadding,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        overflow: 'auto',
+                    }}
+                >
+                    <div
+                        style={{
+                            width: '100%',
+                            maxWidth: responsiveConfig.layout.maxWidth,
+                            margin: '0 auto',
+                        }}
+                    >
+                        <Card
+                            style={{
+                                width: '100%',
+                                background: 'white',
+                                borderRadius: screens.xs ? '12px' : '16px',
+                                boxShadow: '0 10px 40px rgba(0, 0, 0, 0.15)',
+                                padding: responsiveConfig.layout.cardPadding,
+                            }}
+                        >
+                            <Title level={3} style={{textAlign: 'center'}}>Registration Closed</Title>
+                            <Text style={{ display: 'block', textAlign: 'center' }}>Resident registration is currently disabled.</Text>
+                        </Card>
+                    </div>
+                </Content>
+            </Layout>
+        );
+    }
 
     return (
         <Layout

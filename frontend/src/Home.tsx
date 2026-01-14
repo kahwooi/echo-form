@@ -1,10 +1,73 @@
-import React from "react";
-import { Button, Card, Col, Row, Typography, Layout } from "antd";
+import React, { useEffect, useState } from "react";
+import { Button, Card, Col, Row, Typography, Layout, Spin } from "antd";
+import { useSearchParams } from "react-router-dom";
+import axios from "axios";
 
-const { Title } = Typography;
+const { Title, Text } = Typography;
 const { Content } = Layout;
 
+const apiParkingBase = process.env.BUN_PUBLIC_PARKING_API_BASE;
+
 export function Home() {
+  const [searchParams] = useSearchParams();
+  const parkingLocationId = searchParams.get('id') || '';
+  const [configLoading, setConfigLoading] = useState(true);
+  const [enableRegistration, setEnableRegistration] = useState(false);
+
+  useEffect(() => {
+    const fetchConfig = async () => {
+      if (!parkingLocationId) {
+        setConfigLoading(false);
+        return;
+      }
+
+      try {
+        const response = await axios.get(`${apiParkingBase}/api/public/parking-locations/settings`, {
+          params: { id: parkingLocationId }
+        });
+        setEnableRegistration(response.data.enable_registration || false);
+      } catch (error) {
+        console.error("Failed to fetch config:", error);
+        setEnableRegistration(false);
+      } finally {
+        setConfigLoading(false);
+      }
+    };
+    fetchConfig();
+  }, [parkingLocationId]);
+
+  if (configLoading) {
+    return (
+      <Layout style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+        <Content style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
+          <Card style={{ textAlign: 'center', padding: '40px' }}>
+            <Spin size="large" />
+            <div style={{ marginTop: 16, fontSize: '16px' }}>Loading...</div>
+          </Card>
+        </Content>
+      </Layout>
+    );
+  }
+
+  if (!enableRegistration) {
+    return (
+      <Layout style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+        <Content style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', padding: '24px' }}>
+          <Card style={{ textAlign: 'center', padding: '40px', maxWidth: '600px' }}>
+            <Title level={2} style={{ color: '#1890ff', marginBottom: 24 }}>
+              Genting Season Pass Registration
+            </Title>
+            <div style={{ padding: '24px', background: '#fff7e6', borderRadius: '8px', border: '1px solid #ffd591' }}>
+              <Text style={{ color: '#d46b08', fontSize: '18px' }}>
+                Registration is currently disabled for this location.
+              </Text>
+            </div>
+          </Card>
+        </Content>
+      </Layout>
+    );
+  }
+
   return (
     <Layout
       style={{
@@ -66,7 +129,7 @@ export function Home() {
                   }} 
                   block 
                   size="large" 
-                  href="/resident"
+                  href={`/resident?id=${parkingLocationId}`}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.transform = 'translateY(-2px)';
                     e.currentTarget.style.boxShadow = '0 6px 20px rgba(24, 144, 255, 0.4)';
@@ -94,7 +157,7 @@ export function Home() {
                   }} 
                   block 
                   size="large" 
-                  href="/company"
+                  href={`/company?id=${parkingLocationId}`}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.transform = 'translateY(-2px)';
                     e.currentTarget.style.boxShadow = '0 6px 20px rgba(82, 196, 26, 0.4)';

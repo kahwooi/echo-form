@@ -23,7 +23,8 @@ import {
     Space,
     Select,
     Checkbox,
-    Grid
+    Grid,
+    Spin
 } from "antd";
 import type { RcFile } from "antd/es/upload";
 import Dragger from "antd/es/upload/Dragger";
@@ -133,14 +134,15 @@ const vehicleOptions = [
 ];
 
 // --- Config ---
-const apiBase = process.env.BUN_PUBLIC_OPP_API_BASE || "http://localhost:8081";
-const apiParkingBase = process.env.BUN_PUBLIC_PARKING_API_BASE || "http://localhost:8080";
+const apiBase = process.env.BUN_PUBLIC_OPP_API_BASE;
+const apiParkingBase = process.env.BUN_PUBLIC_PARKING_API_BASE;
 const siteKey = process.env.BUN_PUBLIC_TURNSTILE_SITE_KEY || '';
 
 export function ResidentForm() {
     const [form] = Form.useForm();
     const screens = useBreakpoint();
     const [searchParams] = useSearchParams();
+    const [configLoading, setConfigLoading] = useState(true);
     const [config, setConfig] = useState({
         maxGeneralFiles: 1,
         concurrentUploads: 2,
@@ -199,12 +201,12 @@ export function ResidentForm() {
 
     // Fetch config
     useEffect(() => {
-        const parkinglocationId = searchParams.get('id');
+        const parkingLocationId = searchParams.get('id');
         const fetchConfig = async () => {
             try {
                 const response = await axios.get(`${apiParkingBase}/api/public/parking-locations/settings`,{
                     params: {
-                        id: parkinglocationId
+                        id: parkingLocationId
                     }
                 });
                 setConfig(prevConfig => ({
@@ -213,6 +215,12 @@ export function ResidentForm() {
                 }));
             } catch (error) {
                 console.error("Failed to fetch config:", error);
+                setConfig(prevConfig => ({
+                    ...prevConfig,
+                    enableRegistration: false,
+                }));
+            } finally  {
+                setConfigLoading(false);
             }
         };
         fetchConfig();
@@ -798,6 +806,21 @@ export function ResidentForm() {
         }
     };
 
+    // Show loading state while config is being fetched
+    if (configLoading) {
+        return (
+            <Layout style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+                <Content style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                    <Card style={{ textAlign: 'center', padding: '40px' }}>
+                        <Spin size="large" />
+                        <div style={{ fontSize: '24px', marginBottom: '16px' }}>Loading...</div>
+                    </Card>
+                </Content>
+            </Layout>
+        );
+    }
+
+    // Show registration closed message
     if (!config.enableRegistration) {
          return (
             <Layout
