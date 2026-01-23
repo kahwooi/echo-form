@@ -3,6 +3,7 @@ import {
     ArrowLeftOutlined,
     CheckCircleOutlined,
     ExclamationCircleOutlined,
+    InfoCircleOutlined,
 } from "@ant-design/icons";
 import { Turnstile } from "@marsidev/react-turnstile";
 import {
@@ -24,13 +25,15 @@ import {
     Select,
     Checkbox,
     Grid,
-    Spin
+    Spin,
+    Tooltip
 } from "antd";
 import type { RcFile } from "antd/es/upload";
 import Dragger from "antd/es/upload/Dragger";
 import axios, { type AxiosProgressEvent } from "axios";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
+import { InfoModal } from "./InfoModal";
 
 const { Title, Text } = Typography;
 const { useBreakpoint } = Grid;
@@ -161,6 +164,14 @@ export function ResidentForm() {
     const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({});
     const [uploadResults, setUploadResults] = useState<UploadResult[]>([]);
     const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+
+    // Info Modal state
+    const [modalConfig, setModalConfig] = useState<{
+        open: boolean;
+        title: string;
+        content?: ReactNode;
+        image?: string;
+    }>({ open: false, title: '' });
 
     const [uploadToken, setUploadToken] = useState<string | null>(null);
 
@@ -958,7 +969,21 @@ export function ResidentForm() {
                                 <Col xs={24} md={12}>
                                     <Form.Item
                                         name="nricNumber"
-                                        label="NRIC/Passport Number"
+                                        label={
+                                            <span>
+                                                NRIC/Passport Number{' '}
+                                                <Tooltip title="Enter your National Registration Identity Card number or Passport number">
+                                                    <InfoCircleOutlined 
+                                                        style={{ color: '#1890ff', cursor: 'pointer' }} 
+                                                        onClick={() => setModalConfig({
+                                                            open: true,
+                                                            title: 'NRIC/Passport Information',
+                                                            content: <p>Enter your National Registration Identity Card number or Passport number for identification purposes.</p>,
+                                                        })}
+                                                    />
+                                                </Tooltip>
+                                            </span>
+                                        }
                                         rules={[{ required: false, message: 'Optional' }]}
                                     >
                                         <Input 
@@ -1350,6 +1375,13 @@ export function ResidentForm() {
                     </Card>
                 </div>
             </Content>
+            <InfoModal
+                open={modalConfig.open}
+                onClose={() => setModalConfig({ ...modalConfig, open: false })}
+                title={modalConfig.title}
+                content={modalConfig.content}
+                image={modalConfig.image}
+            />
         </Layout>
     );
 }
