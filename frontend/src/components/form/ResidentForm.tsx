@@ -34,6 +34,7 @@ import axios, { type AxiosProgressEvent } from "axios";
 import { useEffect, useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 import { InfoModal } from "../ui/InfoModal";
+import vehicleClassesImg from "../../assets/vehicle_classes.jpg";
 
 const { Title, Text } = Typography;
 const { useBreakpoint } = Grid;
@@ -1091,7 +1092,22 @@ export function ResidentForm() {
                                 <Col xs={24} md={12}>
                                     <Form.Item
                                         name="vehicleType"
-                                        label="Vehicle Class"
+                                        label={
+                                            <span>
+                                                Vehicle Class{' '}
+                                                <Tooltip title="Select your vehicle class">
+                                                    <InfoCircleOutlined 
+                                                        style={{ color: '#1890ff', cursor: 'pointer' }} 
+                                                        onClick={() => setModalConfig({
+                                                            open: true,
+                                                            title: 'Vehicle Class Information',
+                                                            content: <p>Select your vehicle class from the dropdown list.</p>,
+                                                            image: vehicleClassesImg,
+                                                        })}
+                                                    />
+                                                </Tooltip>
+                                            </span>
+                                        }
                                         rules={[{ required: true, message: 'Required' }]}
                                     >
                                         <Select 
