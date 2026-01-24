@@ -1,9 +1,9 @@
 import { ConfigProvider } from "antd";
-import { CompanyForm } from "./form/CompanyForm";
-import "./index.css";
+import { CompanyForm } from "../components/form/CompanyForm";
+import { ResidentForm } from "@/components/form/ResidentForm";
+import "../styles/index.css";
 import msMY from 'antd/locale/ms_MY';
 import { Route, Routes } from "react-router-dom";
-import { ResidentForm } from "./form/ResidentForm";
 import { Home } from "./Home";
 
 export function App() {

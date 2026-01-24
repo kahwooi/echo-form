@@ -33,7 +33,7 @@ import Dragger from "antd/es/upload/Dragger";
 import axios, { type AxiosProgressEvent } from "axios";
 import { useEffect, useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
-import { InfoModal } from "./InfoModal";
+import { InfoModal } from "../ui/InfoModal";
 
 const { Title, Text } = Typography;
 const { useBreakpoint } = Grid;
